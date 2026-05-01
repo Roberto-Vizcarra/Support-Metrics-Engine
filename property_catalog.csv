@@ -1,0 +1,283 @@
+name,label,type,group,classification,sanitization_reason,description
+security_form_request_type,Security Questionnaire and SOC 2,enumeration,gij,KEEP,,Denoted if the contact is interested in receiving our SOC2 report and if they want us to complete their custom security form questionnaire. Letting us know if we need to send an NDA and then follow up
+si_jira_issue_id,Jira issue ID,string,si_jira_integration,KEEP,,ID of the Jira issue the ticket is attached to
+si_jira_issue_key,Jira issue identifier,string,si_jira_integration,KEEP,,Key of the Jira issue the ticket is attached to
+si_jira_issue_priority,Jira issue priority,string,si_jira_integration,KEEP,,Priority of the Jira issue the ticket is attached to
+si_jira_issue_status,Jira issue status,string,si_jira_integration,KEEP,,Status of the Jira issue the ticket is attached to
+hs_added_to_waitlist_at,Added to waitlist at,string,ticket_activity,KEEP,,Time the ticket was added to the waitlist
+hs_all_conversation_mentions,All conversation mentions,enumeration,ticket_activity,KEEP,,All mentioned users on the associated conversations
+hs_assignment_method,Assignment Method,enumeration,ticket_activity,KEEP,,defines how the Object Assignment is done
+hs_draft_user_ids,Draft UserIds,enumeration,ticket_activity,KEEP,,The ids of the users that have open drafts on this ticket.
+hs_feedback_last_nps_rating_number,Latest NPS survey rating,number,ticket_activity,KEEP,,Latest NPS rating rolled up from associated feedback submission
+hs_in_waitlist,In Waitlist,bool,ticket_activity,KEEP,,"Is ticket in a waitlist, to be assigned when users are able to work the ticket"
+hs_last_closed_date,Last Closed Date,datetime,ticket_activity,KEEP,,The date when ticket was last closed
+hs_last_csat_date,Last CSAT survey date,datetime,ticket_activity,KEEP,,The time that this contact last submitted a CSAT survey response.
+hs_last_csat_rating,Last CSAT survey rating,string,ticket_activity,KEEP,,Last CSAT rating rolled up from associated feedback submission
+hs_lastmodifieddate,Last modified date,datetime,ticket_activity,KEEP,,"Most recent timestamp of any property update for this ticket. This includes HubSpot internal properties, which can be visible or hidden. This property is updated automatically."
+hs_mentioned_note_user_ids,mentioned_note_user_ids,enumeration,ticket_activity,KEEP,,All mentioned users on the ticket notes
+hs_mentions_resolved_user_ids,hs_mentions_resolved_user_ids,enumeration,ticket_activity,KEEP,,All resolved user ids mentioned on associated conversations and notes
+hs_mentions_user_ids,mentions_user_ids,enumeration,ticket_activity,KEEP,,All user ids mentioned on associated conversations and notes
+hs_retroactive_sla_update_at,Retroactive SLA update at,datetime,ticket_activity,KEEP,,This property is a trigger for updating SLAs for the ticket. Activity hereof will be picked up by the SLAs system for processing.
+hs_seen_by_agent_ids,Users interaction,enumeration,ticket_activity,KEEP,,Stores a list of users who have viewed the most recent interaction on a ticket
+hs_snoozed_by_user_ids,Snoozed by,enumeration,ticket_activity,KEEP,,Stores a list of users who have currently snoozed this ticket. This value is set automatically by HubSpot.
+hs_snoozed_for_portal,Portal-wide snooze,bool,ticket_activity,KEEP,,Indicates whether this ticket is snoozed for all users in your account. This value is automatically set by HubSpot.
+hs_ticket_reopened_at,Ticket reopen date,datetime,ticket_activity,KEEP,,Date when the ticket was re-opened
+hs_waitlist_routing_targets,Waitlist routing targets,string,ticket_activity,KEEP,,Describe the targets to which the waitlist is attempting to assign the object.
+hs_waitlist_sort_value,Waitlist sort value,datetime,ticket_activity,KEEP,,"Datetime for sorting waitlist objects. Prioritizes sla ttfr. If not present, then sorts by time added to waitlist. The magic number is roughly 20 years."
+jut_reviewed,JUT reviewed,enumeration,ticket_activity,KEEP,,Used to mark Jira Update Tickets as reviewed
+hs_ticket_language_ai_tag,Language,enumeration,ticket_ai_enrichment,KEEP,,Language identified by AI based on the visitor's messages within a ticket.
+ai_agent_actions_rejected,AI_Agent_Actions_Rejected,enumeration,ticketinformation,KEEP,,
+ai_handled,AI_Handled,enumeration,ticketinformation,KEEP,,
+application,Application,enumeration,ticketinformation,KEEP,,Name of the application that the ticket is related to (initially designed for Jira/GIJ apps)
+associated_issue_id,Associated Issue ID,string,ticketinformation,KEEP,,Unique ID from the related issue tracker (at creation this is the Linear issue ID)
+closed_date,Close date,datetime,ticketinformation,KEEP,,The date the ticket was closed
+created_by,Created by,number,ticketinformation,KEEP,,VID of contact that created the ticket
+createdate,Create date,datetime,ticketinformation,KEEP,,The date the ticket was created
+escalated___watched,Escalated / Watched,enumeration,ticketinformation,KEEP,,This field is used to denote tickets that need special attention or need to be viewed independently of the normal queues and statuses.
+first_agent_reply_date,First agent email response date,datetime,ticketinformation,KEEP,,The date of the first email response from an agent after a ticket was created
+gij_cloud_app_information,GIJ Cloud App Information,string,ticketinformation,KEEP,,GIJ Cloud App Information
+gij_edition,GIJ_Edition,enumeration,ticketinformation,KEEP,,
+gij_git_service_provider,GIJ Git Service Provider,enumeration,ticketinformation,KEEP,,Used to keep track of issue for specific Git Service Providers
+gij_server,GIJ Server,enumeration,ticketinformation,KEEP,,"Yes/No selection to mark if a GIJ client is using Server, or not."
+gkversion,GKVersion,enumeration,ticketinformation,KEEP,,Version the user is on
+hs_all_accessible_team_ids,All teams,enumeration,ticketinformation,KEEP,,"The team IDs, including the team hierarchy, of all default and custom owner properties for this record."
+hs_all_assigned_business_unit_ids,Brands,enumeration,ticketinformation,KEEP,,The brands this record is assigned to.
+hs_all_owner_ids,All owner IDs,enumeration,ticketinformation,KEEP,,Values of all default and custom owner properties for this record.
+hs_all_team_ids,All team IDs,enumeration,ticketinformation,KEEP,,The team IDs of all default and custom owner properties for this record.
+hs_all_topics_added_by_user,All topics added by user,enumeration,ticketinformation,KEEP,,A list of all distinct topics added to the ticket by a user
+hs_all_topics_mentioned,All topics mentioned,enumeration,ticketinformation,KEEP,,"List of all the distinct topics related to any mention in email, chat, call etc within the ticket"
+hs_all_topics_removed_by_user,All topics removed by user,enumeration,ticketinformation,KEEP,,A list of all distinct topics removed from the ticket by a user
+hs_applied_sla_rule_config_at,Applied SLA Rule Config Date,datetime,ticketinformation,KEEP,,Timestamp the current SLA Rule Config was applied to the ticket
+hs_applied_sla_rule_config_id,Applied SLA Rule Config ID,number,ticketinformation,KEEP,,Reference to the SLA rule that was applied to this ticket
+hs_applied_sla_schedule_at,Applied SLA Schedule Date,datetime,ticketinformation,KEEP,,The date at which the current SLA schedule was applied to the ticket.
+hs_applied_sla_schedule_id,Applied SLA Schedule Id,number,ticketinformation,KEEP,,The id of the SLA schedule currently applied to the ticket.
+hs_assigned_team_ids,Assigned Teams,enumeration,ticketinformation,KEEP,,The target main teams or the user's main team assigned to the ticket by automatic assignment.
+hs_auto_generated_from_thread_id,Auto-generated from thread id,number,ticketinformation,KEEP,,Thread that this ticket was automatically created for using ticket rules
+hs_conversations_originating_thread_id,Conversations originating thread id,number,ticketinformation,KEEP,,Thread that this ticket was originally created for
+hs_copied_at,Copied at,datetime,ticketinformation,KEEP,,The date the ticket was copied
+hs_copied_by_user,Copied by user,enumeration,ticketinformation,KEEP,,The user that split the ticket
+hs_copied_from_ticket,Copied ticket,enumeration,ticketinformation,KEEP,,The ticket copied
+hs_copied_ticket_source,Copied ticket source,enumeration,ticketinformation,KEEP,,How the ticket was copied
+hs_created_by_user_id,Created by user ID,number,ticketinformation,KEEP,,The user who created this record. This value is set automatically by HubSpot.
+hs_createdate,HubSpot create date,datetime,ticketinformation,KEEP,,Internal read-only property representing the date the ticket was created in HubSpot
+hs_current_generic_channel_id,Current channel,enumeration,ticketinformation,KEEP,,"Current genericChannelId of associated conversation, if any"
+hs_custom_inbox,Custom inbox ID,number,ticketinformation,KEEP,,ID of the custom inbox the ticket is associated with
+hs_customer_agent_escalated_time,Customer Agent escalated time,datetime,ticketinformation,KEEP,,The date and time that Customer Agent escalated a conversation associated with this ticket for review.
+hs_customer_agent_matched_segment,Customer Agent Matched Segment,enumeration,ticketinformation,KEEP,,"The audience segment resolved by Customer Agent for workflow routing, synced from the associated conversation."
+hs_customer_agent_ticket_status,Customer Agent ticket status,enumeration,ticketinformation,KEEP,,Signifies if the Breeze Customer Agent has escalated an issue
+hs_cx_score_range,CX Score range,enumeration,ticketinformation,KEEP,,
+hs_external_object_ids,External object ids,enumeration,ticketinformation,KEEP,,Unique ids corresponding to tickets in a system outside of HubSpot
+hs_feedback_last_ces_rating,Last CES survey rating,enumeration,ticketinformation,KEEP,,Last CES survey rating that this contact gave for this ticket
+hs_feedback_last_survey_date,Last CES survey date,datetime,ticketinformation,KEEP,,The time that this contact last submitted a CES survey response. This is automatically set by HubSpot.
+hs_file_upload,File upload,string,ticketinformation,KEEP,,Files attached to a support form by a contact.
+hs_first_agent_message_sent_at,First agent response date,datetime,ticketinformation,KEEP,,The date of the first response from an agent out of all associated conversations
+hs_first_agent_message_sent_by,First responding rep,enumeration,ticketinformation,KEEP,,The agent that first responds to a ticket
+hs_first_assignee_type,First Assignee Type,enumeration,ticketinformation,KEEP,,"This property is deprecated and going to be deleted, please do not use it. "
+hs_form_id,Form,enumeration,ticketinformation,KEEP,,Form which created the ticket
+hs_form_submission_conversion_id,Form submission conversion ID ,string,ticketinformation,KEEP,,Submission that created the ticket
+hs_help_desk_onboarding_ticket,Help Desk onboarding ticket,string,ticketinformation,KEEP,,String storing information about whether this ticket is this a test ticket used to introduce the Help Desk for onboarding
+hs_helpdesk_sort_timestamp,Helpdesk Sort Timestamp,datetime,ticketinformation,KEEP,,A calculated property to help with sorting in the Helpdesk
+hs_in_helpdesk,In Help Desk,bool,ticketinformation,KEEP,,Is this Ticket rendered in the Help Desk
+hs_inbox_id,Inbox ID,number,ticketinformation,KEEP,,Inbox the ticket is in
+hs_is_closed,Closed,bool,ticketinformation,KEEP,,Flag for whether a ticket is considered closed or open
+hs_is_closed_in_time_to_close_sla_count,Is Closed in Time to Close Sla Count,number,ticketinformation,KEEP,,"1 if ttc is successfully reached, 0 if not, and nothing if ttc is still active"
+hs_is_closed_in_time_to_first_response_sla_count,Is Closed in Time to First Response Sla Count,number,ticketinformation,KEEP,,"1 if ttfr is successfully reached, 0 if not, and nothing if ttfr is still active"
+hs_is_one_touch_ticket,First contact resolution,bool,ticketinformation,KEEP,,was the ticket closed with just one agent message sent
+hs_is_visible_in_help_desk,Is Visible in Help desk,bool,ticketinformation,KEEP,,Whether the ticket is visible in help desk
+hs_last_message_sent_at,Last response date,datetime,ticketinformation,KEEP,,The date of the last response from an agent or bot
+hs_lastactivitydate,Last activity date,datetime,ticketinformation,KEEP,,"The last time a note, call, email, meeting, or task was logged for a ticket. This is updated automatically by HubSpot."
+hs_lastcontacted,Last contacted date,datetime,ticketinformation,KEEP,,"The last time a call, chat conversation, LinkedIn message, postal mail, meeting, sales email, SMS, or WhatsApp message was logged for a ticket. This is set automatically by HubSpot based on user actio"
+hs_latest_message_seen_by_agent_ids,Latest message seen by agent ids,enumeration,ticketinformation,KEEP,,Agents who have seen the newest message across all conversations associated to the ticket
+hs_merged_object_ids,Merged Ticket IDs,enumeration,ticketinformation,KEEP,,The list of Ticket record IDs that have been merged into this Ticket. This value is set automatically by HubSpot.
+hs_most_relevant_sla_status,Most relevant SLA status,enumeration,ticketinformation,KEEP,,Most relevant sla status
+hs_most_relevant_sla_type,Most Relevant SLA Type,enumeration,ticketinformation,KEEP,,"Most relevant SLA type between Close By, First Response, Next Response"
+hs_nextactivitydate,Next activity date,datetime,ticketinformation,KEEP,,"The date of the next upcoming activity for a ticket. This property is set automatically by HubSpot based on user action. This includes logging a future call, email, or meeting using the Log feature, a"
+hs_notes_last_activity,Last Activity,object_coordinates,ticketinformation,KEEP,,The coordinates of the last activity for a ticket. This is set automatically by HubSpot based on user actions in the ticket record.
+hs_notes_next_activity,Next Activity,object_coordinates,ticketinformation,KEEP,,The coordinates of the next upcoming activity for a ticket. This is set automatically by HubSpot based on user actions in the ticket record.
+hs_notes_next_activity_type,Next Activity Type,enumeration,ticketinformation,KEEP,,"The type of the next upcoming activity for a ticket. This property is set automatically by HubSpot based on user action. This includes logging a future call, email, or meeting using the Log feature, a"
+hs_num_associated_companies,Number of Associated Companies,number,ticketinformation,KEEP,,Number of companies associated with this ticket
+hs_num_associated_conversations,Number of Associated Conversations,number,ticketinformation,KEEP,,Number of conversations associated to the ticket
+hs_num_times_contacted,Number of times contacted,number,ticketinformation,KEEP,,"The number of times a call, email, or meeting was logged on the ticket"
+hs_number_of_touches,Number of touches,number,ticketinformation,KEEP,,
+hs_object_id,Record ID,number,ticketinformation,KEEP,,The unique ID for this record. This value is set automatically by HubSpot.
+hs_object_source,Record creation source,string,ticketinformation,KEEP,,Raw internal PropertySource present in the RequestMeta when this record was created.
+hs_object_source_detail_1,Record source detail 1,string,ticketinformation,KEEP,,First level of detail on how this record was created.
+hs_object_source_detail_2,Record source detail 2,string,ticketinformation,KEEP,,Second level of detail on how this record was created.
+hs_object_source_detail_3,Record source detail 3,string,ticketinformation,KEEP,,Third level of detail on how this record was created.
+hs_object_source_id,Record creation source ID,string,ticketinformation,KEEP,,Raw internal sourceId present in the RequestMeta when this record was created.
+hs_object_source_label,Record source,enumeration,ticketinformation,KEEP,,How this record was created.
+hs_object_source_user_id,Record creation source user ID,number,ticketinformation,KEEP,,Raw internal userId present in the RequestMeta when this record was created.
+hs_originating_channel_instance_id,Originating channel account,enumeration,ticketinformation,KEEP,,First channel account used when conversation was started
+hs_originating_generic_channel_id,Originating channel type,enumeration,ticketinformation,KEEP,,The channel the conversation is in
+hs_outbound_ticket,Outbound ticket,bool,ticketinformation,KEEP,,Was the ticket created by sending an outbound communication from an object record page?
+hs_owning_teams,Owning Teams,enumeration,ticketinformation,KEEP,,The teams that are attributed to this record.
+hs_pinned_engagement_id,Pinned Engagement ID,number,ticketinformation,KEEP,,The object ID of the current pinned engagement. This will only be shown if there is already an association to the engagement.
+hs_pipeline,Pipeline,enumeration,ticketinformation,KEEP,,The pipeline that contains this ticket
+hs_pipeline_stage,Ticket status,enumeration,ticketinformation,KEEP,,The pipeline stage that contains this ticket
+hs_predicted_cx_score,CX Score,number,ticketinformation,KEEP,,
+hs_predicted_cx_score_evidence,CX Score explanation,string,ticketinformation,KEEP,,Explanation for the ticket's CX Score
+hs_primary_topic,Primary topic,enumeration,ticketinformation,KEEP,,Single top-level topic in a portal's Topic taxonomy that represents the reason the ticket/conversation was first opened
+hs_read_only,Read only object,bool,ticketinformation,KEEP,,Determines whether a record can be edited by a user.
+hs_resolution,Resolution,enumeration,ticketinformation,KEEP,,The action taken to resolve the ticket
+hs_sales_email_last_replied,Recent Sales Email Replied Date,datetime,ticketinformation,KEEP,,The last time a tracked sales email was replied to for this ticket
+hs_shared_team_ids,Shared teams,enumeration,ticketinformation,KEEP,,Additional teams whose users can access the Ticket based on their permissions. This can be set manually or through Workflows or APIs.
+hs_shared_user_ids,Shared users,enumeration,ticketinformation,KEEP,,Additional users that can access the Ticket based on their permissions. This can be set manually or through Workflows and APIs.
+hs_sla_operating_hours,SLA operating hours,string,ticketinformation,KEEP,,Configured operating hours when SLA was applied
+hs_sla_pause_status,SLA Pause Status,enumeration,ticketinformation,KEEP,,Status describing if the SLAs on a ticket are paused.
+hs_source_object_id,Source Object ID,number,ticketinformation,KEEP,,The ID of the object from which the data was migrated. This is set automatically during portal data migration.
+hs_source_url,Source url,string,ticketinformation,KEEP,,The url where the ticket initially started.
+hs_summarized_ticket_owner_type,Summarized Ticket Owner Type,enumeration,ticketinformation,KEEP,,Summarizes the mix of automated and human ownership involved in handling a ticket throughout its entire lifecycle.
+hs_support_workflows_april_2021,HS Workflows Remediation April 2021,enumeration,ticketinformation,KEEP,,HubSpot Support property that stores workflows this record may have been enrolled in unexpectedly in April 2021
+hs_tag_ids,Ticket Tags,enumeration,ticketinformation,KEEP,,List of tag ids applicable to a ticket. This property is set automatically by HubSpot.
+hs_thread_ids_to_restore,Thread IDs To Restore,enumeration,ticketinformation,KEEP,,Thread IDs (from cv-threads) used to implement custom cascading delete/restore
+hs_ticket_category,Category,enumeration,ticketinformation,KEEP,,Main reason customer reached out for help
+hs_ticket_id,Ticket ID,number,ticketinformation,KEEP,,The unique ID for this ticket. This unique ID is automatically populated by HubSpot and cannot be changed.
+hs_ticket_owner_type,Ticket Owner Type,enumeration,ticketinformation,KEEP,,Identifies each individual type of owner that handled a ticket throughout its entire lifecycle.
+hs_ticket_priority,Priority,enumeration,ticketinformation,KEEP,,The level of attention needed on the ticket
+hs_time_to_close_in_operating_hours,Time to close in SLA hours,number,ticketinformation,KEEP,,The time between when the ticket was created and closed. This time calculation accounts for the goals set up for your SLAs.
+hs_time_to_close_sla_at,Time to Close SLA Due Date,datetime,ticketinformation,KEEP,,When the ticket falls out of Time to Close SLA.
+hs_time_to_close_sla_status,Time to Close SLA Ticket Status,enumeration,ticketinformation,KEEP,,Current Time to Close SLA status of ticket
+hs_time_to_first_assign,Time to first assign,number,ticketinformation,KEEP,,"This property is deprecated and going to be deleted, please do not use it"
+hs_time_to_first_rep_assignment,Time to first rep assignment,number,ticketinformation,KEEP,,
+hs_time_to_first_response_in_operating_hours,Time to first response in SLA hours,number,ticketinformation,KEEP,,The time between the ticket create date and the first agent reply. This time calculation accounts for the goals set up for your SLAs.
+hs_time_to_first_response_sla_at,Time to First Response SLA Due Date,datetime,ticketinformation,KEEP,,When the ticket falls out of the Time to First Response SLA
+hs_time_to_first_response_sla_status,Time to First Response SLA Status,enumeration,ticketinformation,KEEP,,Current Time to First Response SLA status
+hs_time_to_next_response_sla_at,Time to Next Response SLA Due Date,datetime,ticketinformation,KEEP,,When the ticket falls out of Time to Next Response SLA
+hs_time_to_next_response_sla_status,Time to Next Response SLA Status,enumeration,ticketinformation,KEEP,,Current Time to Next Response SLA status
+hs_unique_creation_key,Unique creation key,string,ticketinformation,KEEP,,Unique property used for idempotent creates
+hs_updated_by_user_id,Updated by user ID,number,ticketinformation,KEEP,,The user who last updated this record. This value is set automatically by HubSpot.
+hs_user_ids_of_all_notification_followers,User IDs of all notification followers,enumeration,ticketinformation,KEEP,,The user IDs of all users that have clicked follow within the object to opt-in to getting follow notifications
+hs_user_ids_of_all_notification_unfollowers,User IDs of all notification unfollowers,enumeration,ticketinformation,KEEP,,The user IDs of all object owners that have clicked unfollow within the object to opt-out of getting follow notifications
+hs_user_ids_of_all_owners,User IDs of all owners,enumeration,ticketinformation,KEEP,,The user IDs of all owners of this record.
+hs_was_imported,Performed in an import,bool,ticketinformation,KEEP,,Object is part of an import
+hubspot_owner_assigneddate,Owner assigned date,datetime,ticketinformation,KEEP,,The most recent timestamp of when an owner was assigned to this record. This value is set automatically by HubSpot.
+hubspot_owner_id,Ticket owner,enumeration,ticketinformation,KEEP,,The user from your team that the ticket is assigned to. You can assign additional users to a ticket record by creating a custom HubSpot user property.
+hubspot_team_id,HubSpot team,enumeration,ticketinformation,KEEP,,The Primary team of the ticket owner for the ticket. This property is set automatically by HubSpot.
+install_id,Install ID,string,ticketinformation,KEEP,,customer's cloud instance install ID
+issue_category__customer_facing_field_,Issue Category (CUSTOMER FACING FIELD),enumeration,ticketinformation,KEEP,,Used for customers to self-report the type of issue they are having
+jira_cloud_url,Jira Cloud URL,string,ticketinformation,KEEP,,Jira Cloud URL
+keifsquad_background_research_rating,Keifsquad-Background-research-rating,enumeration,ticketinformation,KEEP,,"Rate the issue background research notes. How useful was it? How relevant were the results? Scale of 1-5, with 1 being not useful at all, 5 being a 100% match."
+keifsquad_email_response_rating,Keifsquad-email-response-rating,enumeration,ticketinformation,KEEP,,"Rate the initial email response usefulness. How useful was it? Scale of 1-5, with 1 being not useful at all, 5 being a ready to send email"
+last_engagement_date,Date of last engagement,datetime,ticketinformation,KEEP,,The date of the last reply or note
+last_reply_date,Last customer reply date,datetime,ticketinformation,KEEP,,The date of the last customer response
+notes_last_contacted,Last Contacted (Ticket Note),datetime,ticketinformation,KEEP,,"The last time a call, chat conversation, LinkedIn message, postal mail, meeting, note, sales email, SMS, or WhatsApp message was logged for a ticket. This is set automatically by HubSpot based on user"
+notes_last_updated,Last Activity Date (Ticket Note),datetime,ticketinformation,KEEP,,"The last time a note, call, email, meeting, or task was logged for a ticket. This is set automatically by HubSpot based on user actions in the ticket record."
+notes_next_activity_date,Next Activity Date (Ticket Note),datetime,ticketinformation,KEEP,,The date of the next upcoming activity for this ticket
+nps_follow_up_answer,NPS follow up,string,ticketinformation,KEEP,,Answer to NPS follow up question
+nps_follow_up_question_version,NPS follow up question,number,ticketinformation,KEEP,,Specific version of NPS follow up question that was asked
+nps_score,Conversation NPS score,enumeration,ticketinformation,KEEP,,NPS score received after ticket resolution
+num_contacted_notes,Number of times contacted (Ticket Note),number,ticketinformation,KEEP,,"The number of times a call, email or meeting was logged for this ticket"
+num_notes,Number of Sales Activities,number,ticketinformation,KEEP,,Number of sales activities for this ticket
+number_of_jira_data_center_nodes,Number of Jira Data Center Nodes,number,ticketinformation,KEEP,,Number of Jira Data Center Nodes
+operating_system,Operating System,string,ticketinformation,KEEP,,Operating System
+order_type,Order Type,enumeration,ticketinformation,KEEP,,"For Sales/Success Tickets, if the Ticket is relating to new business, expansion, cancellation, reactivation, renewal, reduction."
+order_type_arr,Order Type ARR,number,ticketinformation,KEEP,,"When Success fils in this field, the ARR should be the expected ARR for the order type we are working with."
+org_subscription_start_date,Org Subscription Start Date,date,ticketinformation,KEEP,,"The most recent subscription started date from the associated Organization. It is necessary for the information to exist on the ticket object in order for certain workflow actions to make use of it, s"
+original_support_gmail_inbox,Original Support Gmail Inbox,enumeration,ticketinformation,KEEP,,"The ticket was emailed to this inbox, and the ticket originated from here."
+po_number,PO Number,string,ticketinformation,KEEP,,
+product_s_,Product,enumeration,ticketinformation,KEEP,,
+product_version,Product Version,string,ticketinformation,KEEP,,Version Number
+program,Program,enumeration,ticketinformation,KEEP,,Form submissions for Pro for a Cause and Pro for a Cure
+prospective_or_existing_client,Prospective_or_Existing_Client,enumeration,ticketinformation,KEEP,,
+q4_support_backup,Q4 Support Backup,enumeration,ticketinformation,KEEP,,
+reseller_ticket_type_self_select,Reseller Ticket Type Self-Select,enumeration,ticketinformation,KEEP,,Q3 2023 CS team is working to eliminate reseller back and forth by trying this form where resellers select their answer & that leads to automated emails to help reduce current high-touch levels
+sen__ticket_,SEN (Ticket),string,ticketinformation,KEEP,,Atlassian Support Entitlement Number (SEN)
+severity__ticket_,Severity (Ticket),enumeration,ticketinformation,KEEP,,Used to track the severity of bugs reported by tickets
+source_ref,Reference to source-specific object,string,ticketinformation,KEEP,,The id of a connected source object
+source_thread_id,Reference to email thread,string,ticketinformation,KEEP,,The id of an email thread with ticket conversation
+source_type,Source,enumeration,ticketinformation,KEEP,,Channel where ticket was originally submitted
+sub_process_account1,Sub_Process_Account1,enumeration,ticketinformation,KEEP,,Customer Choice for Contact Form. sub process 1 for Accounting
+sub_process_account2_dd,Sub_Process_Account2-DD,enumeration,ticketinformation,KEEP,,Customer Choice for Contact Form. sub process 2 for Accounting
+sub_process_account2_new_owner_email,Sub_Process_Account2-New-Owner-Email,string,ticketinformation,KEEP,,
+sub_process_billing,Sub_Process_Billing1,enumeration,ticketinformation,KEEP,,Customer Choice for Contact Form. sub process 1 for Billing
+sub_process_billing2,Sub_Process_Billing2,enumeration,ticketinformation,KEEP,,Customer Choice for Contact Form. sub process 2 for Billing
+sub_process_billing2_charge_date,Sub_Process_Billing2-Charge-date,string,ticketinformation,KEEP,,
+sub_process_billing2_dd,Sub_Process_Billing2-DD,enumeration,ticketinformation,KEEP,,
+sub_process_billing2_renewal_date,Sub_Process_Billing2-Renewal-Date,date,ticketinformation,KEEP,,
+sub_process_legal_security_compliance_1,Sub_Process_legal_security_compliance1,enumeration,ticketinformation,KEEP,,"Customer Choice for Contact Form. sub process 1 for Legal, Security or Compliance inquiry"
+sub_process_legal_security_compliance_2_account_owner,Sub_Process_legal_security_compliance-2-Account-Owner,string,ticketinformation,KEEP,,
+sub_process_legal_security_compliance_2_dd,Sub_Process_legal_security_compliance-2-DD,enumeration,ticketinformation,KEEP,,Customer Choice for Contact Form. sub process 2 for Legal
+sub_process_legal_security_compliance_2_legal_concern,Sub_Process_legal_security_compliance-2-legal-concern,string,ticketinformation,KEEP,,
+sub_process_legal_security_compliance_2_security_concern,Sub_Process_legal_security_compliance-2-Security-Concern,string,ticketinformation,KEEP,,
+sub_process_reseller1,Sub_Process_Reseller1,enumeration,ticketinformation,KEEP,,Customer Choice for Contact Form. sub process 1 for Reseller
+sub_process_reseller2_dd,Sub_Process_reseller2-DD,enumeration,ticketinformation,KEEP,,Customer Choice for Contact Form. sub process 2 for reseller
+sub_process_reseller_renewal_date,Sub_process_reseller-Renewal-Date,date,ticketinformation,KEEP,,
+sub_process_sales_success1,Sub_Process_Sales-Success1,enumeration,ticketinformation,KEEP,,Customer Choice for Contact Form. sub process 1 for Sales and Success
+sub_process_sales_success2_seat_count,Sub_Process_Sales-Success2-Seat-Count,string,ticketinformation,KEEP,,
+sub_process_support1,Sub_Process_Support1,enumeration,ticketinformation,KEEP,,
+submitted_from_form,Submitted from form,enumeration,ticketinformation,KEEP,,For marking the form the customer used to submit the ticket
+subscription_plan,Subscription_Plan,enumeration,ticketinformation,KEEP,,Drop down for Plan
+suppress_ticket_follow_up_email,Suppress Ticket Follow-up Email,enumeration,ticketinformation,KEEP,,"Don't send the ""Do you still need help?"" email "
+tags,Tags,enumeration,ticketinformation,KEEP,,Tags associated with your tickets
+ticket_misrouted,Ticket Misrouted,enumeration,ticketinformation,KEEP,,"Please add if a ticket has been misrouted, so that can help us track down issues with the routing process"
+ticket_required_escalation_from_,Ticket required escalation,enumeration,ticketinformation,KEEP,,Update this field when your ticket requires input from dev or QA.
+ticket_type,Ticket Type (GKC - Support),enumeration,ticketinformation,KEEP,,Broad category of ticket
+ticket_type__accounting_,Ticket Type (Accounting),enumeration,ticketinformation,KEEP,,Ticket Categories
+ticket_type__axosoft___support_,Ticket Type (Axosoft - Support),enumeration,ticketinformation,KEEP,,Ticket Type (Axosoft - Support)
+ticket_type__gij___support_,Ticket Type (GIJ - Support),enumeration,ticketinformation,KEEP,,Multi-select field that helps to narrow down the area(s) the ticket focuses on.
+ticket_type__gitlens___support_,Ticket Type (GitLens - Support),enumeration,ticketinformation,KEEP,,Ticket Type (GitLens - Support)
+ticket_type_customer_success_,Ticket Type (Customer Success),enumeration,ticketinformation,KEEP,,Customer Success Agents will tag each ticket by topic category.
+time_to_close,Time to close,number,ticketinformation,KEEP,,The time between when the ticket was created and closed
+time_to_first_agent_reply,Time to first agent email reply,number,ticketinformation,KEEP,,The time from the ticket create date to the first agent email reply
+unconverted_feedback,Unconverted Feedback,enumeration,ticketinformation,KEEP,,"Unconverted trial users who received the email to provide feedback on why they have not upgraded.
+Option 1: GK is missing features I need 
+Option 2: I need help to convince the team 
+Option 3: It cost"
+unconverted_feedback___text,Unconverted Feedback - Text,string,ticketinformation,KEEP,,"Related to the Unconverted Feedback field. If an unconverted trial user provides additional information in free text, paste their response here. "
+within_refund_period,Within Refund Period,enumeration,ticketinformation,KEEP,,"Used by the Refund Request workflow. When a ticket asking for a refund is submitted, the result of workflow logic that determines the request was made within the refund period is stored here, for late"
+account_type_ticket_only_,Account-Type (Ticket Only),enumeration,ticketinformation,EXCLUDE,customer account identification,Account type
+company,Company,string,ticketinformation,EXCLUDE,company-related (likely customer),
+contact_purpose,What do you need help with?,enumeration,ticketinformation,EXCLUDE,customer PII,
+content,Ticket description,string,ticketinformation,EXCLUDE,customer-authored content,Description of the ticket
+customer_company,Customer Company,string,ticketinformation,EXCLUDE,customer identity/company,
+end_user,End User (Ticket Only),string,ticketinformation,EXCLUDE,customer identity/company,The customer email address that Resellers provide when they email in for GitKraken quotes
+end_user_company_ticket_only_,End User Company (Ticket Only),string,ticketinformation,EXCLUDE,customer identity/company,The Customer Company which is associated with the reseller request.
+end_user_email,End_User_Email,string,ticketinformation,EXCLUDE,customer identity/company,
+hs_all_associated_contact_companies,All associated contact companies,string,ticketinformation,EXCLUDE,aggregated customer contact data,All associated contact companies
+hs_all_associated_contact_emails,All associated contact emails,string,ticketinformation,EXCLUDE,aggregated customer contact data,All associated contact emails
+hs_all_associated_contact_firstnames,All associated contact first names,string,ticketinformation,EXCLUDE,aggregated customer contact data,All associated contact first names
+hs_all_associated_contact_lastnames,All associated contact last names,string,ticketinformation,EXCLUDE,aggregated customer contact data,All associated contact last names
+hs_all_associated_contact_mobilephones,All associated contact mobile phones,string,ticketinformation,EXCLUDE,aggregated customer contact data,All associated contact mobile phones
+hs_all_associated_contact_phones,All associated contact phones,string,ticketinformation,EXCLUDE,aggregated customer contact data,All associated contact phones
+hs_conversations_originating_message_id,Originating Conversations Message Id,string,ticketinformation,EXCLUDE,message metadata / content references,Conversations Message Id of the message that originated this ticket
+hs_email_subject,Email subject,string,ticketinformation,EXCLUDE,message metadata / content references,Email subject
+hs_feedback_last_ces_follow_up,Last CES survey comment,string,ticketinformation,EXCLUDE,free-text survey response from customer,Last CES survey comment that this contact gave for this ticket
+hs_first_visitor_message_sentiment,(Deprecated) First message sentiment,enumeration,ticket_ai_enrichment,EXCLUDE,computed from customer message content,"No new values after 05/01/2026 - Sentiment of the visitor's initial message (Positive, Neutral, or Negative), based on an AI-generated sentiment score. Scores of 60-100 are Positive, 41-59 are Neutral"
+hs_first_visitor_message_sentiment_score,First message sentiment score,number,ticket_ai_enrichment,EXCLUDE,computed from customer message content,AI-generated sentiment score (0-100) of the initial message sent by the visitor. Higher scores indicate more positive sentiment.
+hs_has_live_chat_ended_or_email_sent,Has live chat ended or email sent,enumeration,ticketinformation,EXCLUDE,message metadata / content references,
+hs_is_latest_message_failed,Is latest message failed,bool,ticketinformation,EXCLUDE,message metadata / content references,Is latest message failed
+hs_is_latest_message_hidden_from_all,Is latest message hidden from all,bool,ticketinformation,EXCLUDE,message metadata / content references,Is latest message hidden from all
+hs_last_csat_comment,Last CSAT survey comment,string,ticket_activity,EXCLUDE,free-text survey response from customer,Last CSAT survey comment associated to this ticket
+hs_last_email_activity,Last email activity,enumeration,ticketinformation,EXCLUDE,message metadata / content references,The type of the last email activity with the contact associated with the ticket.
+hs_last_email_date,Last email date,datetime,ticketinformation,EXCLUDE,message metadata / content references,The date of the last email activity with the contact associated with the ticket.
+hs_last_email_details,Last email details,string,ticketinformation,EXCLUDE,message metadata / content references,The id and direction of the last non-forwarded email
+hs_last_email_type,Last Email Type,string,ticketinformation,EXCLUDE,message metadata / content references,
+hs_last_message_from_visitor,Last message from visitor,bool,ticketinformation,EXCLUDE,message metadata / content references,Whether the last message came from visitor
+hs_last_message_received_at,Last message received date,datetime,ticketinformation,EXCLUDE,message metadata / content references,The date of the last response from the visitor
+hs_last_nps_survey_comment,Last NPS survey comment,string,ticket_activity,EXCLUDE,free-text survey response from customer,Last NPS survey comment associated to this ticket
+hs_last_visitor_message_sentiment,(Deprecated) Last message sentiment,enumeration,ticket_ai_enrichment,EXCLUDE,computed from customer message content,"No new values after 05/01/2026 - Sentiment of the visitor's latest message (Positive, Neutral, or Negative), based on an AI-generated sentiment score. Scores of 60-100 are Positive, 41-59 are Neutral,"
+hs_last_visitor_message_sentiment_score,Latest message sentiment score,number,ticket_ai_enrichment,EXCLUDE,computed from customer message content,AI-generated sentiment score (0-100) of the most recent message sent by the visitor. Higher scores indicate more positive sentiment.
+hs_latest_message_attachment_types,Latest message attachment types,enumeration,ticketinformation,EXCLUDE,message metadata / content references,List of attachment types from the latest message
+hs_latest_message_is_forwarded_email,Latest message is forwarded email,bool,ticketinformation,EXCLUDE,message metadata / content references,Is latest message a forwarded email
+hs_latest_message_is_thread_comment,Latest message is thread comment,bool,ticketinformation,EXCLUDE,message metadata / content references,Is latest message a thread comment
+hs_latest_message_visible_to_visitor,Latest message visible to visitor,string,ticketinformation,EXCLUDE,message metadata / content references,The text of the latest message that is visible to the visitor (truncated)
+hs_latest_message_visible_to_visitor_sent_at,Latest message visible to visitor sent at,datetime,ticketinformation,EXCLUDE,message metadata / content references,The timestamp of when the last message visible to the visitor was sent.
+hs_msteams_message_id,Microsoft Teams message ID for this ticket.,string,ticketinformation,EXCLUDE,message metadata / content references,Microsoft Teams message ID for this ticket.
+hs_originating_email_engagement_id,Originating email engagement id,number,ticketinformation,EXCLUDE,message metadata / content references,Engagement id of the email originating this ticket
+hs_overall_visitor_messages_sentiment,(Deprecated) Average ticket sentiment,enumeration,ticket_ai_enrichment,EXCLUDE,computed from customer message content,"No new values after 05/01/2026 - Overall sentiment of the ticket (Positive, Neutral, or Negative), determined by the average of AI-analyzed sentiment scores from all visitor messages. An average score"
+hs_overall_visitor_messages_sentiment_score,Average ticket sentiment score,number,ticket_ai_enrichment,EXCLUDE,computed from customer message content,"The average sentiment score (0-100) of all visitor messages on a ticket. Each message's sentiment is individually analyzed by AI, and this property displays the mean average of those individual scores"
+hs_primary_company,Primary Company,string,ticketinformation,EXCLUDE,customer identity/company,Primary company of a ticket
+hs_primary_company_id,Primary Company ID,number,ticketinformation,EXCLUDE,customer identity/company,Primary company ID of a ticket
+hs_primary_company_name,Primary Company Name,string,ticketinformation,EXCLUDE,customer identity/company,Primary company name of a ticket
+license_type_ticket_only_,License-Type (Ticket Only),enumeration,ticketinformation,EXCLUDE,licensing identifies specific customer accounts,Copied from contact value
+new_company_name,New Company Name,string,ticketinformation,EXCLUDE,company-related (likely customer),
+si_jira_issue_assignee,Jira issue assignee,string,si_jira_integration,EXCLUDE,Jira free-text / internal user identifier,Assignee of the Jira issue the ticket is attached to
+si_jira_issue_link,Jira issue link,string,si_jira_integration,EXCLUDE,Jira free-text / internal user identifier,Link to the Jira issue the ticket is attached to
+si_jira_issue_reporter,Jira issue reporter,string,si_jira_integration,EXCLUDE,Jira free-text / internal user identifier,Reporter of the Jira issue the ticket is attached to
+si_jira_issue_summary,Jira issue summary,string,si_jira_integration,EXCLUDE,Jira free-text / internal user identifier,Summary of the Jira issue the ticket is attached to
+si_jira_sync_notes,Jira notes sync by default,string,si_jira_integration,EXCLUDE,Jira free-text / internal user identifier,"Specifies a default value for the ""Sync notes"" flag in the Jira issue attachment modal window"
+sub_process_legal_security_compliance_2_licensecount_existing,Sub_Process_legal_security_compliance-2-LicenseCount-existing,string,ticketinformation,EXCLUDE,licensing identifies specific customer accounts,
+sub_process_legal_security_compliance_2_licensecount_expected,Sub_Process_legal_security_compliance-2-LicenseCount-expected,string,ticketinformation,EXCLUDE,licensing identifies specific customer accounts,
+sub_process_reseller_existing_license_count,Sub_Process_Reseller-Existing-License-Count,string,ticketinformation,EXCLUDE,licensing identifies specific customer accounts,
+sub_process_reseller_new_license_count,Sub_Process_Reseller-New-License-Count,string,ticketinformation,EXCLUDE,licensing identifies specific customer accounts,
+subject,Ticket name,string,ticketinformation,EXCLUDE,customer-authored content,Short summary of ticket
