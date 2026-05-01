@@ -1,8 +1,8 @@
-"""Validation gate per BUILD_SPEC.md § 10.
+"""Validation gate per BUILD_SPEC.md section 10.
 
 Runs after a full backfill. Confirms:
   1. Sync completed (counts from sync_runs).
-  2. (Skipped) — ticket 1689835569 predates the 2025-01-01 cutoff and is out of scope.
+  2. (Skipped) - ticket 1689835569 predates the 2025-01-01 cutoff and is out of scope.
   3. Headline reports execute and produce non-empty results.
   4. EXCLUDE-listed columns are absent from `tickets`. (Sanitization holds.)
   5. One-screen summary: row counts per table, last sync, sample query timings.
@@ -10,9 +10,15 @@ Runs after a full backfill. Confirms:
 
 from __future__ import annotations
 
+import io
 import logging
+import sys
 import time
 from collections import OrderedDict
+
+# Ensure unicode-safe stdout on Windows consoles.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from config import ACTIVE_PIPELINES, LEGACY_PIPELINES
 from sync.catalog import excluded_names
@@ -146,7 +152,7 @@ def check_reports() -> None:
         m = w[key]
         delta = f"{m['delta_pct']:+.1f}%" if m['delta_pct'] is not None else "—"
         print(f"    {label}: cur={format_duration_ms(m['current'])} (n={m['current_n']})   "
-              f"last={format_duration_ms(m['last'])} (n={m['last_n']})   Δ={delta}")
+              f"last={format_duration_ms(m['last'])} (n={m['last_n']})   delta={delta}")
 
     print("\n  Rep performance (30 days, support team only):")
     start, end = rolling_days(30)
