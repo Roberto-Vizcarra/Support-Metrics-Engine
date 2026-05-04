@@ -58,6 +58,7 @@ For any request matching a catalog entry, run the corresponding script:
 | D1 (FRT by pipeline) | `python -m reports.frt_by_pipeline` | Last 60 days |
 | E1–E6 (volume snapshots) | `python -m reports.volume_snapshots` | As specified per sub-report |
 | F1 (CSAT by survey) | `python -m reports.csat_by_survey` | Last 60 days |
+| G1 (interactive dashboard) | `python -m reports.dashboard` | All periods (auto) |
 
 All report scripts accept:
 - `--start YYYY-MM-DD` and `--end YYYY-MM-DD` to override the period
@@ -142,7 +143,7 @@ When you do reach for the connector, do not bring back excluded fields (no subje
 | Use case | Default format | Notes |
 |---|---|---|
 | Recurring catalog reports | Excel `.xlsx` | One sheet per logical view + a "Methodology" sheet at the front |
-| Visual dashboards / slides | HTML | Use the `frontend-design` skill (`/mnt/skills/public/frontend-design/SKILL.md`) — read before building |
+| Visual dashboards / slides | HTML | Run `python -m reports.dashboard` to regenerate; opens in any browser |
 | Spot checks, ad-hoc answers | Inline markdown table | Don't create a file unless asked |
 | Exec-facing single-page summary | Word `.docx` | Ask before assuming |
 | Raw data dumps | CSV | Always include `hs_object_id` for traceability back to HubSpot |

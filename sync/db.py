@@ -39,13 +39,14 @@ def ensure_db(db_path: Path = DB_PATH, schema_path: Path = SCHEMA_PATH) -> None:
 
 def _refresh_config_tables(conn: sqlite3.Connection) -> None:
     """Mirror config.PIPELINE_STAGES into queryable tables."""
-    from config import ACTIVE_PIPELINES, LEGACY_PIPELINES, PIPELINE_STAGES
+    from config import ACTIVE_PIPELINES, LEGACY_PIPELINES, PIPELINE_STAGES, STAGE_LABELS
 
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS pipeline_stages (
           pipeline_id TEXT NOT NULL,
           stage_id    TEXT NOT NULL,
           is_closed   INTEGER NOT NULL,
+          label       TEXT,
           PRIMARY KEY (pipeline_id, stage_id)
         );
         CREATE TABLE IF NOT EXISTS pipelines (
@@ -62,9 +63,9 @@ def _refresh_config_tables(conn: sqlite3.Connection) -> None:
     for pid, info in PIPELINE_STAGES.items():
         closed = info.get("closed", set())
         for sid in info.get("all", set()):
-            rows.append((pid, sid, 1 if sid in closed else 0))
+            rows.append((pid, sid, 1 if sid in closed else 0, STAGE_LABELS.get(sid)))
     conn.executemany(
-        "INSERT INTO pipeline_stages (pipeline_id, stage_id, is_closed) VALUES (?, ?, ?)",
+        "INSERT INTO pipeline_stages (pipeline_id, stage_id, is_closed, label) VALUES (?, ?, ?, ?)",
         rows,
     )
 
@@ -73,7 +74,7 @@ def _refresh_config_tables(conn: sqlite3.Connection) -> None:
         pipe_rows.append((pid, label, 0, 1))
     for pid, label in LEGACY_PIPELINES.items():
         pipe_rows.append((pid, label, 1, 0))
-    # Any pipeline in PIPELINE_STAGES not in either list — record without label
+    # Any pipeline in PIPELINE_STAGES not in either list -- record without label
     known = set(ACTIVE_PIPELINES) | set(LEGACY_PIPELINES)
     for pid in PIPELINE_STAGES:
         if pid not in known:

@@ -149,6 +149,22 @@ This document inventories every report observed in the current HubSpot Support d
 
 ---
 
+## G. Interactive Dashboard
+
+### G1. HTML Dashboard — All Metrics
+- **Output:** Self-contained HTML file (`outputs/dashboard.html`), dark theme, no server required.
+- **Generator:** `python -m reports.dashboard` (or `--output path.html`, `--dry-run` for JSON).
+- **Features:**
+  - Period switcher: Week / Month / QoQ / Current Quarter
+  - Metric toggle: Median / Average (switches all KPIs, rep tables, pipeline FRT)
+  - Sections: KPI summary cards, ticket volume trend (bar chart), TTC & FRT trend (dual-axis line chart), rep performance table, pipeline FRT with bar indicators, pipeline volume (stacked bar chart), backlog aging breakdown, CSAT by survey
+  - Reopen rate shown per selected period
+  - All data embedded as JSON — no database or API calls at render time
+  - Chart.js loaded from CDN; everything else is inline
+- **Regeneration:** Run `python -m reports.dashboard` after any sync to produce a fresh dashboard with updated data. The script queries all time periods and embeds the results.
+
+---
+
 ## Suggested additional reports (not in current dashboards but valuable)
 
 | Report | Why |

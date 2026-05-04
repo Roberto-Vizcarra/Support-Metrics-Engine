@@ -46,22 +46,20 @@ These pipelines are kept for historical data only. Most current reports should *
 
 ## 2. Pipeline Stages
 
-Each pipeline has its own set of numeric stage IDs (stored in `hs_pipeline_stage`). The IDs verified for the GitKraken Support pipeline (`5112973`) are below; stage IDs for the other pipelines should be discovered at runtime by sampling tickets in each pipeline (see `03_query_patterns.md` for the discovery snippet).
+Each pipeline has its own set of numeric stage IDs (stored in `hs_pipeline_stage`). Stage labels below were verified directly from HubSpot via the `hs_v2_date_entered_<stageId>` property definitions (May 2026). The canonical mapping lives in `config.STAGE_LABELS`.
 
-### GitKraken Support (5112973) — verified
+### All Active Support Pipelines — verified from HubSpot API
 
-| Stage ID | Inferred Label | Role |
-|---|---|---|
-| `5112974` | New / Open | Initial intake stage; tickets land here from email/chat/forms |
-| `5112975` | Waiting on us / In progress | Active work stage (most common for active tickets) |
-| `5112976` | Waiting on contact / Pending | Awaiting customer response |
-| `5112977` | **Closed** | Terminal stage — used for "is closed" determination |
+All active support pipelines share the same 4-stage pattern:
 
-> ⚠️ **Important on stage labels:** the labels above are inferred from observed transition patterns. The actual labels live in pipeline configuration and should be confirmed by sampling property history. The **stage IDs are the source of truth** — never filter by label.
+| Stage | GitKraken Support | GK Enterprise | GitLens | GIJ Cloud | GIJ DC | GK Adv | GK Biz | GIJ Adv |
+|---|---|---|---|---|---|---|---|---|
+| New | `5112974` | `5246743` | `14356540` | `20336674` | `20340147` | `1036706831` | `1036706857` | `1072729416` |
+| Waiting on contact | `5112975` | `5246744` | `14356541` | `20336675` | `20340148` | `1036706832` | `1036706858` | `1072729417` |
+| Waiting on us | `5112976` | `5246745` | `14356542` | `20336676` | `20340149` | `1036706833` | `1036706859` | `1072729418` |
+| **Closed** | `5112977` | `5246746` | `14356543` | `20336677` | `20340150` | `1036706834` | `1036706860` | `1072729419` |
 
-### Closed-stage pattern across pipelines
-
-In the GitKraken Support pipeline, the highest-numbered stage in the contiguous range immediately following the pipeline ID is the closed stage (e.g., `5112973` → stages `5112974`–`5112977`, with `5112977` being closed). This pattern *probably* holds for the other pipelines but **must be verified per-pipeline** before being used in calculations. The discovery query in `03_query_patterns.md` returns stage IDs ordered by frequency — closed stages are typically the most populous after "active" stages.
+> **Note:** Some non-support pipelines (Sales, Customer Success, Partners) have an additional "In Progress" stage between "Waiting on contact" and "Waiting on us". See `config.STAGE_LABELS` for the complete mapping.
 
 ### Transient / external stage IDs
 
