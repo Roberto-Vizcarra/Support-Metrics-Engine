@@ -466,6 +466,293 @@ def collect_stage_time(conn: sqlite3.Connection, start: str, end: str) -> list[d
     return result
 
 
+
+def collect_sla_compliance(conn: sqlite3.Connection, start: str, end: str) -> dict:
+    """SLA compliance rates using HubSpot SLA status codes.
+
+    Status codes: 0=unknown, 1=active/within SLA, 2=soon due, 3=overdue, 4=closed within SLA.
+    'Met SLA' = status IN (1, 4).  'Breached' = status = 3.
+    """
+    frt_rows = conn.execute("""
+        SELECT t.hs_time_to_first_response_sla_status as status, COUNT(*) as c
+        FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+        WHERE p.is_legacy = 0 AND p.is_active_support = 1
+          AND t.createdate >= ? AND t.createdate < ?
+          AND t.hs_time_to_first_response_sla_status IS NOT NULL
+        GROUP BY status
+    """, (start, end)).fetchall()
+
+    ttc_rows = conn.execute("""
+        SELECT t.hs_time_to_close_sla_status as status, COUNT(*) as c
+        FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+        WHERE p.is_legacy = 0 AND p.is_active_support = 1
+          AND t.createdate >= ? AND t.createdate < ?
+          AND t.hs_time_to_close_sla_status IS NOT NULL
+        GROUP BY status
+    """, (start, end)).fetchall()
+
+    def _parse(rows):
+        met = sum(c for s, c in rows if s in (1, 4))
+        breached = sum(c for s, c in rows if s == 3)
+        total = sum(c for _, c in rows)
+        return {'met': met, 'breached': breached, 'total': total,
+                'rate': round(met / total * 100, 1) if total > 0 else None}
+
+    # Per-pipeline FRT SLA
+    pipe_rows = conn.execute("""
+        SELECT p.label, t.hs_time_to_first_response_sla_status as status, COUNT(*) as c
+        FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+        WHERE p.is_legacy = 0 AND p.is_active_support = 1
+          AND t.createdate >= ? AND t.createdate < ?
+          AND t.hs_time_to_first_response_sla_status IS NOT NULL
+        GROUP BY p.label, status
+    """, (start, end)).fetchall()
+    by_pipe: dict[str, list] = defaultdict(list)
+    for label, status, c in pipe_rows:
+        by_pipe[label].append((status, c))
+    pipes = []
+    for label, rows in sorted(by_pipe.items(), key=lambda x: sum(c for _, c in x[1]), reverse=True):
+        d = _parse(rows)
+        d['pipeline'] = label
+        pipes.append(d)
+
+    return {'frt': _parse(frt_rows), 'ttc': _parse(ttc_rows), 'by_pipeline': pipes}
+
+
+def collect_one_touch(conn: sqlite3.Connection, start: str, end: str) -> dict:
+    """One-touch resolution: tickets closed with <=1 visit to Waiting on us and <=1 to Waiting on contact."""
+    row = conn.execute("""
+        WITH ticket_stages AS (
+            SELECT st.ticket_id, ps.label, ps.is_closed, COUNT(*) as visits
+            FROM stage_transitions st
+            JOIN tickets t ON t.id = st.ticket_id
+            JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = st.to_stage
+            JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+            WHERE p.is_legacy = 0 AND p.is_active_support = 1
+              AND st.transition_at >= ? AND st.transition_at < ?
+            GROUP BY st.ticket_id, ps.label, ps.is_closed
+        ),
+        ticket_summary AS (
+            SELECT ticket_id,
+                SUM(CASE WHEN label = 'Waiting on us' THEN visits ELSE 0 END) as wou,
+                SUM(CASE WHEN label = 'Waiting on contact' THEN visits ELSE 0 END) as woc,
+                SUM(CASE WHEN is_closed = 1 THEN visits ELSE 0 END) as closed_visits
+            FROM ticket_stages GROUP BY ticket_id
+        )
+        SELECT
+            SUM(CASE WHEN closed_visits > 0 THEN 1 ELSE 0 END) as total_closed,
+            SUM(CASE WHEN closed_visits > 0 AND wou <= 1 AND woc <= 1 THEN 1 ELSE 0 END) as one_touch
+        FROM ticket_summary
+    """, (start, end)).fetchone()
+
+    total_closed = row[0] or 0
+    one_touch = row[1] or 0
+
+    # By agent
+    agent_rows = conn.execute("""
+        WITH ticket_stages AS (
+            SELECT st.ticket_id, ps.label, ps.is_closed, COUNT(*) as visits
+            FROM stage_transitions st
+            JOIN tickets t ON t.id = st.ticket_id
+            JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = st.to_stage
+            JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+            WHERE p.is_legacy = 0 AND p.is_active_support = 1
+              AND st.transition_at >= ? AND st.transition_at < ?
+            GROUP BY st.ticket_id, ps.label, ps.is_closed
+        ),
+        ticket_summary AS (
+            SELECT ticket_id,
+                SUM(CASE WHEN label = 'Waiting on us' THEN visits ELSE 0 END) as wou,
+                SUM(CASE WHEN label = 'Waiting on contact' THEN visits ELSE 0 END) as woc,
+                SUM(CASE WHEN is_closed = 1 THEN visits ELSE 0 END) as closed_visits
+            FROM ticket_stages GROUP BY ticket_id
+        )
+        SELECT t.hubspot_owner_id, o.name,
+            SUM(CASE WHEN ts.closed_visits > 0 THEN 1 ELSE 0 END) as agent_closed,
+            SUM(CASE WHEN ts.closed_visits > 0 AND ts.wou <= 1 AND ts.woc <= 1 THEN 1 ELSE 0 END) as agent_one_touch
+        FROM ticket_summary ts
+        JOIN tickets t ON t.id = ts.ticket_id
+        LEFT JOIN owners o ON o.owner_id = CAST(t.hubspot_owner_id AS INTEGER)
+        WHERE t.hubspot_owner_id IS NOT NULL
+        GROUP BY t.hubspot_owner_id
+    """, (start, end)).fetchall()
+
+    agents = []
+    for oid, name, closed, ot in agent_rows:
+        try:
+            if int(oid) not in SUPPORT_OWNER_IDS:
+                continue
+        except (ValueError, TypeError):
+            continue
+        agents.append({
+            'name': name or 'Unknown',
+            'closed': closed,
+            'one_touch': ot,
+            'rate': round(ot / closed * 100, 1) if closed > 0 else None,
+        })
+    agents.sort(key=lambda x: x['closed'], reverse=True)
+
+    return {
+        'total_closed': total_closed,
+        'one_touch': one_touch,
+        'rate': round(one_touch / total_closed * 100, 1) if total_closed > 0 else None,
+        'by_agent': agents,
+    }
+
+
+def collect_workload(conn: sqlite3.Connection) -> list[dict]:
+    """Current open ticket count and aging per support agent."""
+    rows = conn.execute("""
+        SELECT t.hubspot_owner_id, o.name,
+            COUNT(*) as open_count,
+            SUM(CASE WHEN julianday('now') - julianday(t.createdate) <= 7 THEN 1 ELSE 0 END) as d7,
+            SUM(CASE WHEN julianday('now') - julianday(t.createdate) > 7
+                      AND julianday('now') - julianday(t.createdate) <= 30 THEN 1 ELSE 0 END) as d30,
+            SUM(CASE WHEN julianday('now') - julianday(t.createdate) > 30
+                      AND julianday('now') - julianday(t.createdate) <= 90 THEN 1 ELSE 0 END) as d90,
+            SUM(CASE WHEN julianday('now') - julianday(t.createdate) > 90 THEN 1 ELSE 0 END) as d90plus
+        FROM tickets t
+        JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = t.hs_pipeline_stage
+        JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+        LEFT JOIN owners o ON o.owner_id = CAST(t.hubspot_owner_id AS INTEGER)
+        WHERE ps.is_closed = 0 AND p.is_legacy = 0 AND p.is_active_support = 1
+        GROUP BY t.hubspot_owner_id
+    """).fetchall()
+
+    agents = []
+    for oid, name, count, d7, d30, d90, d90plus in rows:
+        try:
+            if oid and int(oid) not in SUPPORT_OWNER_IDS:
+                continue
+        except (ValueError, TypeError):
+            continue
+        agents.append({
+            'name': name or 'Unassigned',
+            'open': count, 'd7': d7, 'd30': d30, 'd90': d90, 'd90plus': d90plus,
+        })
+    agents.sort(key=lambda x: x['open'], reverse=True)
+    return agents
+
+
+def collect_heatmap(conn: sqlite3.Connection) -> list[list[int]]:
+    """7x24 grid: rows=day-of-week (0=Mon), cols=hour. Uses last 90 days of tickets."""
+    rows = conn.execute("""
+        SELECT
+            CAST(strftime('%w', t.createdate) AS INTEGER) as dow,
+            CAST(strftime('%H', t.createdate) AS INTEGER) as hr,
+            COUNT(*) as n
+        FROM tickets t
+        JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+        WHERE p.is_legacy = 0 AND p.is_active_support = 1
+          AND julianday('now') - julianday(t.createdate) <= 90
+        GROUP BY dow, hr
+    """).fetchall()
+    # SQLite %w: 0=Sunday. Convert to Mon=0..Sun=6.
+    grid = [[0]*24 for _ in range(7)]
+    for dow, hr, n in rows:
+        idx = (dow - 1) % 7  # Sun(0)->6, Mon(1)->0, Tue(2)->1, ...
+        grid[idx][hr] = n
+    return grid
+
+
+def collect_type_trend(conn: sqlite3.Connection) -> dict:
+    """Monthly ticket type trend for the top N types (excluding Unknown/null)."""
+    # Find the top 8 types overall
+    top_types = conn.execute("""
+        SELECT COALESCE(t.ticket_type, '') as tt, COUNT(*) as n
+        FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+        WHERE p.is_legacy = 0 AND p.is_active_support = 1
+          AND tt != '' AND tt != 'Unknown'
+        GROUP BY tt ORDER BY n DESC LIMIT 8
+    """).fetchall()
+    type_names = [r[0] for r in top_types]
+    if not type_names:
+        return {'types': [], 'months': [], 'series': []}
+
+    placeholders = ','.join('?' * len(type_names))
+    rows = conn.execute(f"""
+        SELECT strftime('%Y-%m', t.createdate) as mo,
+               t.ticket_type as tt, COUNT(*) as n
+        FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+        WHERE p.is_legacy = 0 AND p.is_active_support = 1
+          AND t.ticket_type IN ({placeholders})
+        GROUP BY mo, tt ORDER BY mo
+    """, type_names).fetchall()
+
+    months_set: set[str] = set()
+    data: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for mo, tt, n in rows:
+        months_set.add(mo)
+        data[tt][mo] = n
+
+    months = sorted(months_set)
+    series = []
+    for tt in type_names:
+        series.append({'type': tt, 'values': [data[tt].get(m, 0) for m in months]})
+
+    return {'types': type_names, 'months': months, 'series': series}
+
+
+def collect_touches(conn: sqlite3.Connection, start: str, end: str) -> dict:
+    """Ticket touch/interaction count distribution using hs_num_times_contacted."""
+    rows = conn.execute("""
+        SELECT CAST(t.hs_num_times_contacted AS INTEGER) as touches, COUNT(*) as n
+        FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+        WHERE p.is_legacy = 0 AND p.is_active_support = 1
+          AND t.createdate >= ? AND t.createdate < ?
+          AND t.hs_num_times_contacted IS NOT NULL
+        GROUP BY touches ORDER BY touches
+    """, (start, end)).fetchall()
+
+    buckets = {'1': 0, '2-3': 0, '4-6': 0, '7-10': 0, '11+': 0}
+    total_touches = 0
+    total_tickets = 0
+    for touches, n in rows:
+        total_touches += touches * n
+        total_tickets += n
+        if touches <= 1:
+            buckets['1'] += n
+        elif touches <= 3:
+            buckets['2-3'] += n
+        elif touches <= 6:
+            buckets['4-6'] += n
+        elif touches <= 10:
+            buckets['7-10'] += n
+        else:
+            buckets['11+'] += n
+
+    # Per-agent average
+    agent_rows = conn.execute("""
+        SELECT t.hubspot_owner_id, o.name,
+            AVG(CAST(t.hs_num_times_contacted AS REAL)) as avg_touches,
+            COUNT(*) as n
+        FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+        LEFT JOIN owners o ON o.owner_id = CAST(t.hubspot_owner_id AS INTEGER)
+        WHERE p.is_legacy = 0 AND p.is_active_support = 1
+          AND t.createdate >= ? AND t.createdate < ?
+          AND t.hs_num_times_contacted IS NOT NULL
+          AND t.hubspot_owner_id IS NOT NULL
+        GROUP BY t.hubspot_owner_id
+    """, (start, end)).fetchall()
+
+    agents = []
+    for oid, name, avg_t, n in agent_rows:
+        try:
+            if int(oid) not in SUPPORT_OWNER_IDS:
+                continue
+        except (ValueError, TypeError):
+            continue
+        agents.append({'name': name or 'Unknown', 'avg_touches': round(avg_t, 1), 'n': n})
+    agents.sort(key=lambda x: x['n'], reverse=True)
+
+    return {
+        'buckets': [{'label': k, 'n': v} for k, v in buckets.items()],
+        'avg': round(total_touches / total_tickets, 1) if total_tickets > 0 else None,
+        'total': total_tickets,
+        'by_agent': agents,
+    }
+
+
 def collect_ticket_type(conn: sqlite3.Connection, start: str, end: str) -> list[dict]:
     rows = conn.execute('''
         SELECT COALESCE(t.ticket_type, 'Unknown') as tt, COUNT(*) as n
@@ -587,6 +874,9 @@ def compute() -> dict:
     stage_time = {}
     ticket_type = {}
     product = {}
+    sla = {}
+    one_touch = {}
+    touches = {}
     for pkey, (ps, pe) in main_periods.items():
         rep[pkey] = collect_rep_performance(conn, ps, pe)
         pipe_frt[pkey] = collect_pipe_frt(conn, ps, pe)
@@ -596,6 +886,9 @@ def compute() -> dict:
         stage_time[pkey] = collect_stage_time(conn, ps, pe)
         ticket_type[pkey] = collect_ticket_type(conn, ps, pe)
         product[pkey] = collect_product(conn, ps, pe)
+        sla[pkey] = collect_sla_compliance(conn, ps, pe)
+        one_touch[pkey] = collect_one_touch(conn, ps, pe)
+        touches[pkey] = collect_touches(conn, ps, pe)
 
     log.info("Collecting KPI per-period aggregates...")
     kpi = {}
@@ -606,6 +899,11 @@ def compute() -> dict:
     res_trend = collect_resolution_trend(conn)
 
     aging, open_total = collect_aging(conn)
+
+    log.info("Collecting workload, heatmap, type trends...")
+    workload = collect_workload(conn)
+    heatmap = collect_heatmap(conn)
+    type_trend = collect_type_trend(conn)
 
     # Sync metadata
     sync_row = conn.execute(
@@ -634,6 +932,12 @@ def compute() -> dict:
         'openTotal': open_total,
         'csat': csat,
         'reopen': reopen,
+        'sla': sla,
+        'oneTouch': one_touch,
+        'touches': touches,
+        'workload': workload,
+        'heatmap': heatmap,
+        'typeTrend': type_trend,
         '_meta': {
             'sync_date': sync_date,
             'ticket_count': ticket_count,
