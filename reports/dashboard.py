@@ -468,55 +468,85 @@ def collect_stage_time(conn: sqlite3.Connection, start: str, end: str) -> list[d
 
 
 def collect_sla_compliance(conn: sqlite3.Connection, start: str, end: str) -> dict:
-    """SLA compliance rates using HubSpot SLA status codes.
+    """SLA compliance: compute business hours between createdate and first_agent_reply_date,
+    compare against per-pipeline FRT targets from config.SLA_FRT_TARGETS.
 
-    Status codes: 0=unknown, 1=active/within SLA, 2=soon due, 3=overdue, 4=closed within SLA.
-    'Met SLA' = status IN (1, 4).  'Breached' = status = 3.
+    Business hours: Mon-Fri 10:00-22:00 UTC (12 hrs/day).
     """
-    frt_rows = conn.execute("""
-        SELECT t.hs_time_to_first_response_sla_status as status, COUNT(*) as c
+    from config import (SLA_FRT_TARGETS, SLA_BUSINESS_HOURS_START,
+                        SLA_BUSINESS_HOURS_END, SLA_BUSINESS_HOURS_PER_DAY)
+
+    rows = conn.execute("""
+        SELECT t.hs_pipeline, p.label, t.createdate, t.first_agent_reply_date
         FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
         WHERE p.is_legacy = 0 AND p.is_active_support = 1
           AND t.createdate >= ? AND t.createdate < ?
-          AND t.hs_time_to_first_response_sla_status IS NOT NULL
-        GROUP BY status
+          AND t.first_agent_reply_date IS NOT NULL
     """, (start, end)).fetchall()
 
-    ttc_rows = conn.execute("""
-        SELECT t.hs_time_to_close_sla_status as status, COUNT(*) as c
-        FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
-        WHERE p.is_legacy = 0 AND p.is_active_support = 1
-          AND t.createdate >= ? AND t.createdate < ?
-          AND t.hs_time_to_close_sla_status IS NOT NULL
-        GROUP BY status
-    """, (start, end)).fetchall()
+    def _biz_hours(created_str: str, replied_str: str) -> float | None:
+        """Compute business hours between two ISO timestamps."""
+        try:
+            c = datetime.fromisoformat(created_str.replace('Z', '+00:00'))
+            r = datetime.fromisoformat(replied_str.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            return None
+        if r <= c:
+            return 0.0
+        hours = 0.0
+        cur = c
+        while cur < r:
+            wd = cur.weekday()  # 0=Mon .. 6=Sun
+            if wd < 5:  # weekday
+                day_start = cur.replace(hour=SLA_BUSINESS_HOURS_START, minute=0, second=0, microsecond=0)
+                day_end = cur.replace(hour=SLA_BUSINESS_HOURS_END, minute=0, second=0, microsecond=0)
+                work_start = max(cur, day_start)
+                work_end = min(r, day_end)
+                if work_start < work_end:
+                    hours += (work_end - work_start).total_seconds() / 3600
+            # Advance to next day start
+            next_day = (cur + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            cur = next_day
+        return round(hours, 2)
 
-    def _parse(rows):
-        met = sum(c for s, c in rows if s in (1, 4))
-        breached = sum(c for s, c in rows if s == 3)
-        total = sum(c for _, c in rows)
-        return {'met': met, 'breached': breached, 'total': total,
-                'rate': round(met / total * 100, 1) if total > 0 else None}
+    # Aggregate by pipeline
+    by_pipe: dict[str, dict] = defaultdict(lambda: {'label': '', 'met': 0, 'breached': 0, 'total': 0, 'biz_hours': []})
+    totals = {'met': 0, 'breached': 0, 'total': 0}
 
-    # Per-pipeline FRT SLA
-    pipe_rows = conn.execute("""
-        SELECT p.label, t.hs_time_to_first_response_sla_status as status, COUNT(*) as c
-        FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
-        WHERE p.is_legacy = 0 AND p.is_active_support = 1
-          AND t.createdate >= ? AND t.createdate < ?
-          AND t.hs_time_to_first_response_sla_status IS NOT NULL
-        GROUP BY p.label, status
-    """, (start, end)).fetchall()
-    by_pipe: dict[str, list] = defaultdict(list)
-    for label, status, c in pipe_rows:
-        by_pipe[label].append((status, c))
+    for pid, plabel, created, replied in rows:
+        target = SLA_FRT_TARGETS.get(pid)
+        if target is None:
+            continue
+        bh = _biz_hours(created, replied)
+        if bh is None:
+            continue
+
+        by_pipe[pid]['label'] = plabel
+        by_pipe[pid]['total'] += 1
+        by_pipe[pid]['biz_hours'].append(bh)
+        by_pipe[pid]['target'] = target
+        totals['total'] += 1
+        if bh <= target:
+            by_pipe[pid]['met'] += 1
+            totals['met'] += 1
+        else:
+            by_pipe[pid]['breached'] += 1
+            totals['breached'] += 1
+
     pipes = []
-    for label, rows in sorted(by_pipe.items(), key=lambda x: sum(c for _, c in x[1]), reverse=True):
-        d = _parse(rows)
-        d['pipeline'] = label
-        pipes.append(d)
+    for pid, d in sorted(by_pipe.items(), key=lambda x: x[1]['total'], reverse=True):
+        pipes.append({
+            'pipeline': d['label'],
+            'target_hrs': d.get('target'),
+            'met': d['met'],
+            'breached': d['breached'],
+            'total': d['total'],
+            'rate': round(d['met'] / d['total'] * 100, 1) if d['total'] > 0 else None,
+            'median_biz_hrs': round(_safe_median(d['biz_hours']), 1) if d['biz_hours'] else None,
+        })
 
-    return {'frt': _parse(frt_rows), 'ttc': _parse(ttc_rows), 'by_pipeline': pipes}
+    totals['rate'] = round(totals['met'] / totals['total'] * 100, 1) if totals['total'] > 0 else None
+    return {'overall': totals, 'by_pipeline': pipes}
 
 
 def collect_one_touch(conn: sqlite3.Connection, start: str, end: str) -> dict:

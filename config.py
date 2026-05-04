@@ -147,5 +147,23 @@ OWNER_TEAM_HEURISTICS: list[tuple[str, str]] = [
     ("growtomation", "shared"),
 ]
 
+# --- SLA targets (FRT in business hours) ---------------------------------
+# Business hours: Mon-Fri 10:00-22:00 UTC (12 hrs/day).
+# Values are the FRT SLA target in business hours per pipeline.
+SLA_BUSINESS_HOURS_START = 10   # UTC
+SLA_BUSINESS_HOURS_END = 22     # UTC
+SLA_BUSINESS_HOURS_PER_DAY = SLA_BUSINESS_HOURS_END - SLA_BUSINESS_HOURS_START  # 12
+
+SLA_FRT_TARGETS: dict[str, float] = {
+    "5112973":   36.0,   # GitKraken Support - Pro: 3 business days
+    "4385573":   36.0,   # GitLens - Pro tier: 3 business days
+    "6777488":   12.0,   # GIJ Cloud - Standard: 1 business day
+    "6906791":   12.0,   # GIJ Data Center - 1 business day
+    "708783907": 12.0,   # GK Support Advanced - 1 business day
+    "708783909": 12.0,   # GK Support Business - 12 hours
+    "5246742":    6.0,   # GK Enterprise - 6 hours
+    "736948125":  6.0,   # GIJ Advanced - 6 hours
+}
+
 # --- Reporting defaults --------------------------------------------------
 LOW_N_THRESHOLD = 20
