@@ -685,13 +685,14 @@ def collect_heatmap(conn: sqlite3.Connection) -> list[list[int]]:
     return grid
 
 
-def collect_type_trend(conn: sqlite3.Connection) -> dict:
-    """Monthly ticket type trend for the top N types (excluding Unknown/null)."""
-    # Find the top 8 types overall
-    top_types = conn.execute("""
-        SELECT COALESCE(t.ticket_type, '') as tt, COUNT(*) as n
+def _type_trend_for(conn: sqlite3.Connection, type_col: str,
+                     pipeline_filter: str) -> dict:
+    """Helper: monthly type trend for a specific type column and pipeline set."""
+    top_types = conn.execute(f"""
+        SELECT COALESCE(NULLIF(t.[{type_col}], ''), '') as tt, COUNT(*) as n
         FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
         WHERE p.is_legacy = 0 AND p.is_active_support = 1
+          AND {pipeline_filter}
           AND tt != '' AND tt != 'Unknown'
         GROUP BY tt ORDER BY n DESC LIMIT 8
     """).fetchall()
@@ -702,10 +703,11 @@ def collect_type_trend(conn: sqlite3.Connection) -> dict:
     placeholders = ','.join('?' * len(type_names))
     rows = conn.execute(f"""
         SELECT strftime('%Y-%m', t.createdate) as mo,
-               t.ticket_type as tt, COUNT(*) as n
+               t.[{type_col}] as tt, COUNT(*) as n
         FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
         WHERE p.is_legacy = 0 AND p.is_active_support = 1
-          AND t.ticket_type IN ({placeholders})
+          AND {pipeline_filter}
+          AND t.[{type_col}] IN ({placeholders})
         GROUP BY mo, tt ORDER BY mo
     """, type_names).fetchall()
 
@@ -721,6 +723,25 @@ def collect_type_trend(conn: sqlite3.Connection) -> dict:
         series.append({'type': tt, 'values': [data[tt].get(m, 0) for m in months]})
 
     return {'types': type_names, 'months': months, 'series': series}
+
+
+# GIJ pipeline IDs
+_GIJ_PIPELINE_IDS = {'6777488', '6906791', '736948125'}
+
+def collect_type_trend(conn: sqlite3.Connection) -> dict:
+    """Monthly ticket type trend, split by product family.
+
+    Returns {'gk': {...}, 'gij': {...}} where each has types/months/series.
+    GK/GitLens uses ticket_type + ticket_type__gitlens___support_.
+    GIJ uses ticket_type__gij___support_.
+    """
+    gij_csv = ','.join(f"'{p}'" for p in _GIJ_PIPELINE_IDS)
+
+    gk = _type_trend_for(conn, 'ticket_type',
+                          f"t.hs_pipeline NOT IN ({gij_csv})")
+    gij = _type_trend_for(conn, 'ticket_type__gij___support_',
+                           f"t.hs_pipeline IN ({gij_csv})")
+    return {'gk': gk, 'gij': gij}
 
 
 def collect_touches(conn: sqlite3.Connection, start: str, end: str) -> dict:
@@ -783,14 +804,37 @@ def collect_touches(conn: sqlite3.Connection, start: str, end: str) -> dict:
     }
 
 
-def collect_ticket_type(conn: sqlite3.Connection, start: str, end: str) -> list[dict]:
-    rows = conn.execute('''
-        SELECT COALESCE(t.ticket_type, 'Unknown') as tt, COUNT(*) as n
+def collect_ticket_type(conn: sqlite3.Connection, start: str, end: str) -> dict:
+    """Ticket type breakdown split by product family: gk vs gij."""
+    gij_csv = ','.join(f"'{p}'" for p in _GIJ_PIPELINE_IDS)
+
+    gk_rows = conn.execute(f'''
+        SELECT COALESCE(
+            NULLIF(t.[ticket_type__gitlens___support_], ''),
+            NULLIF(t.ticket_type, ''),
+            'Unknown'
+        ) as tt, COUNT(*) as n
         FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
         WHERE p.is_legacy = 0 AND t.createdate >= ? AND t.createdate < ?
+          AND t.hs_pipeline NOT IN ({gij_csv})
         GROUP BY tt ORDER BY n DESC LIMIT 12
     ''', (start, end)).fetchall()
-    return [{'type': r[0], 'n': r[1]} for r in rows]
+
+    gij_rows = conn.execute(f'''
+        SELECT COALESCE(
+            NULLIF(t.[ticket_type__gij___support_], ''),
+            'Unknown'
+        ) as tt, COUNT(*) as n
+        FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+        WHERE p.is_legacy = 0 AND t.createdate >= ? AND t.createdate < ?
+          AND t.hs_pipeline IN ({gij_csv})
+        GROUP BY tt ORDER BY n DESC LIMIT 12
+    ''', (start, end)).fetchall()
+
+    return {
+        'gk': [{'type': r[0], 'n': r[1]} for r in gk_rows],
+        'gij': [{'type': r[0], 'n': r[1]} for r in gij_rows],
+    }
 
 
 def collect_product(conn: sqlite3.Connection, start: str, end: str) -> list[dict]:
@@ -1011,7 +1055,6 @@ def generate_html(data: dict) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Generate interactive HTML dashboard")
     parser.add_argument("--output", help="Output file path")
-
     parser.add_argument("--dry-run", action="store_true", help="Print JSON data, don't write HTML")
     args = parser.parse_args()
 
