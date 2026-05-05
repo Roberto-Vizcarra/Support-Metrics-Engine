@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   ai_handled TEXT,  -- AI_Handled
   application TEXT,  -- Application
   associated_issue_id TEXT,  -- Associated Issue ID
+  bulk_close_tag TEXT,  -- Bulk Close Tag
   closed_date TEXT,  -- Close date
   created_by REAL,  -- Created by
   createdate TEXT,  -- Create date
@@ -309,6 +310,20 @@ CREATE TABLE IF NOT EXISTS sync_runs (
 
 CREATE INDEX IF NOT EXISTS idx_sync_runs_ended ON sync_runs(ended_at);
 CREATE INDEX IF NOT EXISTS idx_sync_runs_status ON sync_runs(status);
+
+-- weekly_metrics: weekly snapshot of all dashboard metrics, rebuilt on every sync.
+CREATE TABLE IF NOT EXISTS weekly_metrics (
+  week_start     TEXT NOT NULL,     -- ISO date of Monday, e.g. '2026-01-06'
+  metric         TEXT NOT NULL,     -- metric name, e.g. 'volume_created', 'ttc_median', 'ticket_type_pct'
+  dimension      TEXT NOT NULL DEFAULT '_total',  -- breakdown value, e.g. 'Bug', pipeline name, owner name
+  pipeline_group TEXT NOT NULL DEFAULT 'all',     -- 'gk', 'gij', 'all', or specific pipeline label
+  value          REAL,              -- the numeric value
+  sample_size    INTEGER DEFAULT 0, -- how many tickets contributed
+  PRIMARY KEY (week_start, metric, dimension, pipeline_group)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wm_metric ON weekly_metrics(metric);
+CREATE INDEX IF NOT EXISTS idx_wm_week ON weekly_metrics(week_start);
 
 -- tickets_extra: any property HubSpot returns that isn't in property_catalog.csv.
 -- Flag to user; promote to a real column or sanitize out via the CSV.

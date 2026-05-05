@@ -25,6 +25,7 @@ FROM (
       ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = st.to_stage
     JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
     WHERE ps.is_closed = 1
+      AND t.bulk_close_tag IS NULL
       AND (:include_legacy = 1 OR p.is_legacy = 0)
     GROUP BY t.id
 )

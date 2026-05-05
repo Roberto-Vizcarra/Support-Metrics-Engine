@@ -40,6 +40,27 @@ def _safe_mean(vals: list[int | float]) -> float | None:
     return statistics.mean(vals) if vals else None
 
 
+def _ticket_details(conn: sqlite3.Connection, ticket_ids: list, limit: int = 50) -> list[dict]:
+    """Fetch standard detail records for a list of ticket IDs."""
+    if not ticket_ids:
+        return []
+    ids = ticket_ids[:limit]
+    placeholders = ','.join('?' * len(ids))
+    rows = conn.execute(f'''
+        SELECT t.id, t.hs_ticket_id, p.label as pipeline, o.name as owner,
+               t.createdate,
+               COALESCE(NULLIF(t.[ticket_type__gitlens___support_], ''), NULLIF(t.ticket_type, ''), NULLIF(t.[ticket_type__gij___support_], ''), 'Unknown') as ticket_type,
+               COALESCE(t.product_s_, 'Unknown') as product
+        FROM tickets t
+        JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+        LEFT JOIN owners o ON o.owner_id = t.hubspot_owner_id
+        WHERE t.id IN ({placeholders})
+        ORDER BY t.createdate DESC
+    ''', ids).fetchall()
+    return [{'id': r[0], 'hs_ticket_id': r[1], 'pipeline': r[2], 'owner': r[3],
+             'created': r[4], 'type': r[5], 'product': r[6]} for r in rows]
+
+
 def _ttc_for_range(conn: sqlite3.Connection, start: str, end: str) -> list[int]:
     """Return list of first-time-to-close values (ms) for tickets first-closed in [start, end)."""
     rows = conn.execute('''
@@ -50,6 +71,7 @@ def _ttc_for_range(conn: sqlite3.Connection, start: str, end: str) -> list[int]:
             JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = st.to_stage
             JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
             WHERE ps.is_closed = 1 AND p.is_legacy = 0
+              AND t.bulk_close_tag IS NULL
             GROUP BY st.ticket_id
         )
         SELECT CAST((julianday(fc.fc) - julianday(t.createdate)) * 86400000 AS INTEGER) as ttc_ms
@@ -87,7 +109,9 @@ def _closed_count(conn: sqlite3.Connection, start: str, end: str) -> int:
             FROM stage_transitions st JOIN tickets t ON t.id = st.ticket_id
             JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = st.to_stage
             JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
-            WHERE ps.is_closed = 1 AND p.is_legacy = 0 GROUP BY st.ticket_id
+            WHERE ps.is_closed = 1 AND p.is_legacy = 0
+              AND t.bulk_close_tag IS NULL
+            GROUP BY st.ticket_id
         ) SELECT COUNT(*) FROM first_close WHERE fc >= ? AND fc < ?
     ''', (start, end)).fetchone()[0]
 
@@ -121,7 +145,7 @@ def collect_weekly(conn: sqlite3.Connection, now: datetime, n_weeks: int = 8) ->
     ranges = []
     for i in range(n_weeks):
         wk_start = now - timedelta(weeks=i)
-        wk_start = wk_start - timedelta(days=wk_start.weekday())  # align Monday
+        wk_start = wk_start - timedelta(days=wk_start.weekday())
         wk_end = wk_start + timedelta(days=7)
         label = wk_start.strftime('%m-%d')
         ranges.append((label, wk_start.strftime('%Y-%m-%dT00:00:00Z'),
@@ -182,10 +206,13 @@ def collect_rep_performance(conn: sqlite3.Connection, start: str, end: str) -> l
             FROM stage_transitions st JOIN tickets t ON t.id = st.ticket_id
             JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = st.to_stage
             JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
-            WHERE ps.is_closed = 1 AND p.is_legacy = 0 GROUP BY st.ticket_id
+            WHERE ps.is_closed = 1 AND p.is_legacy = 0
+              AND t.bulk_close_tag IS NULL
+            GROUP BY st.ticket_id
         )
         SELECT t.hubspot_owner_id as oid, o.name as oname,
-               CAST((julianday(fc.fc) - julianday(t.createdate))*86400000 AS INTEGER) as ttc_ms
+               CAST((julianday(fc.fc) - julianday(t.createdate))*86400000 AS INTEGER) as ttc_ms,
+               t.id as ticket_id
         FROM first_close fc JOIN tickets t ON t.id = fc.ticket_id
         LEFT JOIN owners o ON o.owner_id = CAST(t.hubspot_owner_id AS INTEGER)
         WHERE fc.fc >= ? AND fc.fc < ? AND t.createdate IS NOT NULL
@@ -200,9 +227,9 @@ def collect_rep_performance(conn: sqlite3.Connection, start: str, end: str) -> l
     ''', (start, end)).fetchall()
 
     by_owner: dict[str, dict] = defaultdict(
-        lambda: {'name': '', 'ttc_vals': [], 'frt_vals': [], 'closed': 0}
+        lambda: {'name': '', 'ttc_vals': [], 'frt_vals': [], 'closed': 0, 'ticket_ids': []}
     )
-    for oid_raw, oname, ttc_ms in ttc_rows:
+    for oid_raw, oname, ttc_ms, ticket_id in ttc_rows:
         oid = str(oid_raw) if oid_raw else 'null'
         if oid_raw and int(oid_raw) not in SUPPORT_OWNER_IDS:
             continue
@@ -210,6 +237,7 @@ def collect_rep_performance(conn: sqlite3.Connection, start: str, end: str) -> l
         if ttc_ms and ttc_ms > 0:
             by_owner[oid]['ttc_vals'].append(ttc_ms)
             by_owner[oid]['closed'] += 1
+            by_owner[oid]['ticket_ids'].append(ticket_id)
 
     for oid_raw, oname, frt_ms in frt_rows:
         oid = str(oid_raw) if oid_raw else 'null'
@@ -221,6 +249,12 @@ def collect_rep_performance(conn: sqlite3.Connection, start: str, end: str) -> l
 
     reps = []
     for d in by_owner.values():
+        tickets = _ticket_details(conn, d['ticket_ids'])
+        types: dict[str, int] = defaultdict(int)
+        products: dict[str, int] = defaultdict(int)
+        for t in tickets:
+            types[t['type']] += 1
+            products[t['product']] += 1
         reps.append({
             'name': d['name'],
             'ttc_median_ms': _safe_median(d['ttc_vals']),
@@ -228,6 +262,9 @@ def collect_rep_performance(conn: sqlite3.Connection, start: str, end: str) -> l
             'frt_median_ms': _safe_median(d['frt_vals']),
             'frt_mean_ms': _safe_mean(d['frt_vals']),
             'closed': d['closed'],
+            'tickets': tickets,
+            'types': [{'type': k, 'n': v} for k, v in sorted(types.items(), key=lambda x: x[1], reverse=True)],
+            'products': [{'product': k, 'n': v} for k, v in sorted(products.items(), key=lambda x: x[1], reverse=True)],
         })
     reps.sort(key=lambda x: x['closed'], reverse=True)
     return reps
@@ -235,21 +272,23 @@ def collect_rep_performance(conn: sqlite3.Connection, start: str, end: str) -> l
 
 def collect_pipe_frt(conn: sqlite3.Connection, start: str, end: str) -> list[dict]:
     rows = conn.execute('''
-        SELECT p.label, t.time_to_first_agent_reply as frt_ms
+        SELECT p.label, t.time_to_first_agent_reply as frt_ms, t.id
         FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
         WHERE t.createdate >= ? AND t.createdate < ?
           AND t.time_to_first_agent_reply IS NOT NULL AND p.is_legacy = 0
     ''', (start, end)).fetchall()
-    by_pipe: dict[str, list[int]] = defaultdict(list)
-    for label, frt_ms in rows:
+    by_pipe: dict[str, dict] = defaultdict(lambda: {'vals': [], 'ticket_ids': []})
+    for label, frt_ms, tid in rows:
         if frt_ms and frt_ms > 0:
-            by_pipe[label].append(frt_ms)
+            by_pipe[label]['vals'].append(frt_ms)
+            by_pipe[label]['ticket_ids'].append(tid)
     pipes = [{
         'pipeline': label,
-        'n': len(vals),
-        'frt_median_ms': _safe_median(vals),
-        'frt_mean_ms': _safe_mean(vals),
-    } for label, vals in by_pipe.items()]
+        'n': len(d['vals']),
+        'frt_median_ms': _safe_median(d['vals']),
+        'frt_mean_ms': _safe_mean(d['vals']),
+        'tickets': _ticket_details(conn, d['ticket_ids']),
+    } for label, d in by_pipe.items()]
     pipes.sort(key=lambda x: x['n'], reverse=True)
     return pipes
 
@@ -261,7 +300,8 @@ def collect_pipe_vol(conn: sqlite3.Connection, start: str, end: str) -> list[dic
                SUM(CASE WHEN ps.is_closed = 0 THEN 1 ELSE 0 END) as open_now
         FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
         JOIN pipeline_stages ps ON t.hs_pipeline_stage = ps.stage_id AND t.hs_pipeline = ps.pipeline_id
-        WHERE p.is_legacy = 0 AND t.createdate >= ? AND t.createdate < ?
+        WHERE p.is_legacy = 0 AND t.bulk_close_tag IS NULL
+          AND t.createdate >= ? AND t.createdate < ?
         GROUP BY p.label ORDER BY created DESC
     ''', (start, end)).fetchall()
     return [{'pipeline': r[0], 'created': r[1], 'closed': r[2], 'open': r[3]} for r in rows]
@@ -282,7 +322,25 @@ def collect_aging(conn: sqlite3.Connection) -> tuple[list[dict], int]:
         WHERE ps.is_closed = 0 AND p.is_legacy = 0
         GROUP BY bucket ORDER BY MIN(julianday('now') - julianday(t.createdate))
     ''').fetchall()
-    data = [{'bucket': r[0], 'n': r[1]} for r in aging]
+
+    bucket_conditions = {
+        '0-7d': 'julianday(\'now\') - julianday(t.createdate) <= 7',
+        '7-30d': 'julianday(\'now\') - julianday(t.createdate) > 7 AND julianday(\'now\') - julianday(t.createdate) <= 30',
+        '30-90d': 'julianday(\'now\') - julianday(t.createdate) > 30 AND julianday(\'now\') - julianday(t.createdate) <= 90',
+        '90+d': 'julianday(\'now\') - julianday(t.createdate) > 90',
+    }
+    bucket_tickets = {}
+    for bucket_name, condition in bucket_conditions.items():
+        tid_rows = conn.execute(f'''
+            SELECT t.id FROM tickets t
+            JOIN pipeline_stages ps ON t.hs_pipeline_stage = ps.stage_id AND t.hs_pipeline = ps.pipeline_id
+            JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+            WHERE ps.is_closed = 0 AND p.is_legacy = 0 AND {condition}
+            ORDER BY t.createdate DESC LIMIT 50
+        ''').fetchall()
+        bucket_tickets[bucket_name] = _ticket_details(conn, [r[0] for r in tid_rows])
+
+    data = [{'bucket': r[0], 'n': r[1], 'tickets': bucket_tickets.get(r[0], [])} for r in aging]
     total = sum(a['n'] for a in data)
     return data, total
 
@@ -308,6 +366,7 @@ def collect_reopen(conn: sqlite3.Connection, start: str, end: str) -> dict:
         JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = st.to_stage
         JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
         WHERE ps.is_closed = 1 AND p.is_legacy = 0
+          AND t.bulk_close_tag IS NULL
           AND st.transition_at >= ? AND st.transition_at < ?
     ''', (start, end)).fetchone()[0]
 
@@ -317,7 +376,8 @@ def collect_reopen(conn: sqlite3.Connection, start: str, end: str) -> dict:
                    ROW_NUMBER() OVER (PARTITION BY st.ticket_id ORDER BY st.transition_at) AS rn
             FROM stage_transitions st JOIN tickets t ON t.id = st.ticket_id
             LEFT JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = st.to_stage
-            JOIN pipelines p ON p.pipeline_id = t.hs_pipeline WHERE p.is_legacy = 0
+            JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+            WHERE p.is_legacy = 0 AND t.bulk_close_tag IS NULL
         ),
         pairs AS (
             SELECT a.ticket_id FROM ordered a JOIN ordered b
@@ -332,7 +392,6 @@ def collect_reopen(conn: sqlite3.Connection, start: str, end: str) -> dict:
 
 
 def collect_kpi(conn: sqlite3.Connection, start: str, end: str) -> dict:
-    """Dedicated KPI aggregates for a single period."""
     ttc_vals = _ttc_for_range(conn, start, end)
     frt_vals = _frt_for_range(conn, start, end)
     created = _created_count(conn, start, end)
@@ -349,7 +408,6 @@ def collect_kpi(conn: sqlite3.Connection, start: str, end: str) -> dict:
 
 
 def collect_resolution_trend(conn: sqlite3.Connection) -> list[dict]:
-    """Monthly resolution rate (closed / created) for the full date range."""
     rows = conn.execute('''
         WITH monthly_created AS (
             SELECT strftime('%Y-%m', t.createdate) as mo, COUNT(*) as created
@@ -361,7 +419,9 @@ def collect_resolution_trend(conn: sqlite3.Connection) -> list[dict]:
             FROM stage_transitions st JOIN tickets t ON t.id = st.ticket_id
             JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = st.to_stage
             JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
-            WHERE ps.is_closed = 1 AND p.is_legacy = 0 GROUP BY st.ticket_id
+            WHERE ps.is_closed = 1 AND p.is_legacy = 0
+              AND t.bulk_close_tag IS NULL
+            GROUP BY st.ticket_id
         ),
         monthly_closed AS (
             SELECT strftime('%Y-%m', fc.fc) as mo, COUNT(*) as closed
@@ -381,7 +441,6 @@ def collect_resolution_trend(conn: sqlite3.Connection) -> list[dict]:
 
 
 def collect_stage_time(conn: sqlite3.Connection, start: str, end: str) -> list[dict]:
-    """Time spent in each stage, grouped by pipeline -> stages -> owners."""
     rows = conn.execute('''
         WITH ordered AS (
             SELECT st.ticket_id, st.transition_at, st.to_stage, t.hs_pipeline, t.hubspot_owner_id,
@@ -395,7 +454,8 @@ def collect_stage_time(conn: sqlite3.Connection, start: str, end: str) -> list[d
               AND st.transition_at >= ? AND st.transition_at < ?
         )
         SELECT o.to_stage, o.hs_pipeline, o.hubspot_owner_id,
-               CAST((julianday(COALESCE(o.next_at, 'now')) - julianday(o.transition_at)) * 86400000 AS INTEGER) as duration_ms
+               CAST((julianday(COALESCE(o.next_at, 'now')) - julianday(o.transition_at)) * 86400000 AS INTEGER) as duration_ms,
+               o.ticket_id
         FROM ordered o WHERE duration_ms > 0
     ''', (start, end)).fetchall()
 
@@ -414,14 +474,13 @@ def collect_stage_time(conn: sqlite3.Connection, start: str, end: str) -> list[d
         if row:
             owner_names[oid] = row[0]
 
-    # Accumulate: (pipeline_id, stage_id) -> {vals, by_owner}
-    by_stage = defaultdict(lambda: {'vals': [], 'by_owner': defaultdict(list)})
-    for to_stage, pipeline_id, owner_id, dur_ms in rows:
-        # Closed stages already filtered in SQL via ps.is_closed = 0
+    by_stage = defaultdict(lambda: {'vals': [], 'by_owner': defaultdict(list), 'ticket_ids': set()})
+    for to_stage, pipeline_id, owner_id, dur_ms, ticket_id in rows:
         if (pipeline_id, to_stage) not in stage_closed_map:
-            continue  # skip transient stages not in pipeline_stages table
+            continue
         key = (pipeline_id, to_stage)
         by_stage[key]['vals'].append(dur_ms)
+        by_stage[key]['ticket_ids'].add(ticket_id)
         if owner_id:
             try:
                 oid_int = int(owner_id)
@@ -430,8 +489,7 @@ def collect_stage_time(conn: sqlite3.Connection, start: str, end: str) -> list[d
             except (ValueError, TypeError):
                 pass
 
-    # Group by pipeline
-    pipelines: dict[str, dict] = {}  # pid -> {label, total_n, stages[]}
+    pipelines: dict[str, dict] = {}
     for (pid, sid), d in by_stage.items():
         if pid not in pipelines:
             pipelines[pid] = {'label': pipe_labels.get(pid, str(pid)), 'total_n': 0, 'stages': []}
@@ -450,11 +508,11 @@ def collect_stage_time(conn: sqlite3.Connection, start: str, end: str) -> list[d
             'mean_ms': _safe_mean(d['vals']),
             'n': len(d['vals']),
             'by_owner': owners,
+            'tickets': _ticket_details(conn, list(d['ticket_ids'])),
         }
         pipelines[pid]['stages'].append(stage_entry)
         pipelines[pid]['total_n'] += len(d['vals'])
 
-    # Sort: pipelines by total_n desc, stages within each by n desc
     result = []
     for pid, pdata in sorted(pipelines.items(), key=lambda x: x[1]['total_n'], reverse=True):
         pdata['stages'].sort(key=lambda s: s['n'], reverse=True)
@@ -466,18 +524,12 @@ def collect_stage_time(conn: sqlite3.Connection, start: str, end: str) -> list[d
     return result
 
 
-
 def collect_sla_compliance(conn: sqlite3.Connection, start: str, end: str) -> dict:
-    """SLA compliance: compute business hours between createdate and first_agent_reply_date,
-    compare against per-pipeline FRT targets from config.SLA_FRT_TARGETS.
-
-    Business hours: Mon-Fri 10:00-22:00 UTC (12 hrs/day).
-    """
     from config import (SLA_FRT_TARGETS, SLA_BUSINESS_HOURS_START,
                         SLA_BUSINESS_HOURS_END, SLA_BUSINESS_HOURS_PER_DAY)
 
     rows = conn.execute("""
-        SELECT t.hs_pipeline, p.label, t.createdate, t.first_agent_reply_date
+        SELECT t.id, t.hs_pipeline, p.label, t.createdate, t.first_agent_reply_date
         FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
         WHERE p.is_legacy = 0 AND p.is_active_support = 1
           AND t.createdate >= ? AND t.createdate < ?
@@ -485,7 +537,6 @@ def collect_sla_compliance(conn: sqlite3.Connection, start: str, end: str) -> di
     """, (start, end)).fetchall()
 
     def _biz_hours(created_str: str, replied_str: str) -> float | None:
-        """Compute business hours between two ISO timestamps."""
         try:
             c = datetime.fromisoformat(created_str.replace('Z', '+00:00'))
             r = datetime.fromisoformat(replied_str.replace('Z', '+00:00'))
@@ -496,24 +547,23 @@ def collect_sla_compliance(conn: sqlite3.Connection, start: str, end: str) -> di
         hours = 0.0
         cur = c
         while cur < r:
-            wd = cur.weekday()  # 0=Mon .. 6=Sun
-            if wd < 5:  # weekday
+            wd = cur.weekday()
+            if wd < 5:
                 day_start = cur.replace(hour=SLA_BUSINESS_HOURS_START, minute=0, second=0, microsecond=0)
                 day_end = cur.replace(hour=SLA_BUSINESS_HOURS_END, minute=0, second=0, microsecond=0)
                 work_start = max(cur, day_start)
                 work_end = min(r, day_end)
                 if work_start < work_end:
                     hours += (work_end - work_start).total_seconds() / 3600
-            # Advance to next day start
             next_day = (cur + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
             cur = next_day
         return round(hours, 2)
 
-    # Aggregate by pipeline
-    by_pipe: dict[str, dict] = defaultdict(lambda: {'label': '', 'met': 0, 'breached': 0, 'total': 0, 'biz_hours': []})
+    by_pipe: dict[str, dict] = defaultdict(lambda: {'label': '', 'met': 0, 'breached': 0, 'total': 0, 'biz_hours': [], 'breached_ids': []})
     totals = {'met': 0, 'breached': 0, 'total': 0}
+    all_breached_ids: list = []
 
-    for pid, plabel, created, replied in rows:
+    for tid, pid, plabel, created, replied in rows:
         target = SLA_FRT_TARGETS.get(pid)
         if target is None:
             continue
@@ -532,6 +582,8 @@ def collect_sla_compliance(conn: sqlite3.Connection, start: str, end: str) -> di
         else:
             by_pipe[pid]['breached'] += 1
             totals['breached'] += 1
+            by_pipe[pid]['breached_ids'].append(tid)
+            all_breached_ids.append(tid)
 
     pipes = []
     for pid, d in sorted(by_pipe.items(), key=lambda x: x[1]['total'], reverse=True):
@@ -543,14 +595,15 @@ def collect_sla_compliance(conn: sqlite3.Connection, start: str, end: str) -> di
             'total': d['total'],
             'rate': round(d['met'] / d['total'] * 100, 1) if d['total'] > 0 else None,
             'median_biz_hrs': round(_safe_median(d['biz_hours']), 1) if d['biz_hours'] else None,
+            'breached_tickets': _ticket_details(conn, d['breached_ids']),
         })
 
     totals['rate'] = round(totals['met'] / totals['total'] * 100, 1) if totals['total'] > 0 else None
+    totals['breached_tickets'] = _ticket_details(conn, all_breached_ids)
     return {'overall': totals, 'by_pipeline': pipes}
 
 
 def collect_one_touch(conn: sqlite3.Connection, start: str, end: str) -> dict:
-    """One-touch resolution: tickets closed with <=1 visit to Waiting on us and <=1 to Waiting on contact."""
     row = conn.execute("""
         WITH ticket_stages AS (
             SELECT st.ticket_id, ps.label, ps.is_closed, COUNT(*) as visits
@@ -559,6 +612,7 @@ def collect_one_touch(conn: sqlite3.Connection, start: str, end: str) -> dict:
             JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = st.to_stage
             JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
             WHERE p.is_legacy = 0 AND p.is_active_support = 1
+              AND t.bulk_close_tag IS NULL
               AND st.transition_at >= ? AND st.transition_at < ?
             GROUP BY st.ticket_id, ps.label, ps.is_closed
         ),
@@ -578,7 +632,6 @@ def collect_one_touch(conn: sqlite3.Connection, start: str, end: str) -> dict:
     total_closed = row[0] or 0
     one_touch = row[1] or 0
 
-    # By agent
     agent_rows = conn.execute("""
         WITH ticket_stages AS (
             SELECT st.ticket_id, ps.label, ps.is_closed, COUNT(*) as visits
@@ -587,6 +640,7 @@ def collect_one_touch(conn: sqlite3.Connection, start: str, end: str) -> dict:
             JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = st.to_stage
             JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
             WHERE p.is_legacy = 0 AND p.is_active_support = 1
+              AND t.bulk_close_tag IS NULL
               AND st.transition_at >= ? AND st.transition_at < ?
             GROUP BY st.ticket_id, ps.label, ps.is_closed
         ),
@@ -607,6 +661,36 @@ def collect_one_touch(conn: sqlite3.Connection, start: str, end: str) -> dict:
         GROUP BY t.hubspot_owner_id
     """, (start, end)).fetchall()
 
+    ot_ticket_rows = conn.execute("""
+        WITH ticket_stages AS (
+            SELECT st.ticket_id, ps.label, ps.is_closed, COUNT(*) as visits
+            FROM stage_transitions st
+            JOIN tickets t ON t.id = st.ticket_id
+            JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = st.to_stage
+            JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+            WHERE p.is_legacy = 0 AND p.is_active_support = 1
+              AND t.bulk_close_tag IS NULL
+              AND st.transition_at >= ? AND st.transition_at < ?
+            GROUP BY st.ticket_id, ps.label, ps.is_closed
+        ),
+        ticket_summary AS (
+            SELECT ticket_id,
+                SUM(CASE WHEN label = 'Waiting on us' THEN visits ELSE 0 END) as wou,
+                SUM(CASE WHEN label = 'Waiting on contact' THEN visits ELSE 0 END) as woc,
+                SUM(CASE WHEN is_closed = 1 THEN visits ELSE 0 END) as closed_visits
+            FROM ticket_stages GROUP BY ticket_id
+        )
+        SELECT t.hubspot_owner_id, ts.ticket_id
+        FROM ticket_summary ts
+        JOIN tickets t ON t.id = ts.ticket_id
+        WHERE t.hubspot_owner_id IS NOT NULL
+          AND ts.closed_visits > 0 AND ts.wou <= 1 AND ts.woc <= 1
+    """, (start, end)).fetchall()
+
+    ot_ids_by_agent: dict[str, list] = defaultdict(list)
+    for oid, tid in ot_ticket_rows:
+        ot_ids_by_agent[str(oid)].append(tid)
+
     agents = []
     for oid, name, closed, ot in agent_rows:
         try:
@@ -619,6 +703,7 @@ def collect_one_touch(conn: sqlite3.Connection, start: str, end: str) -> dict:
             'closed': closed,
             'one_touch': ot,
             'rate': round(ot / closed * 100, 1) if closed > 0 else None,
+            'tickets': _ticket_details(conn, ot_ids_by_agent.get(str(oid), [])),
         })
     agents.sort(key=lambda x: x['closed'], reverse=True)
 
@@ -631,7 +716,6 @@ def collect_one_touch(conn: sqlite3.Connection, start: str, end: str) -> dict:
 
 
 def collect_workload(conn: sqlite3.Connection) -> list[dict]:
-    """Current open ticket count and aging per support agent."""
     rows = conn.execute("""
         SELECT t.hubspot_owner_id, o.name,
             COUNT(*) as open_count,
@@ -659,13 +743,36 @@ def collect_workload(conn: sqlite3.Connection) -> list[dict]:
         agents.append({
             'name': name or 'Unassigned',
             'open': count, 'd7': d7, 'd30': d30, 'd90': d90, 'd90plus': d90plus,
+            '_oid': oid,
         })
+
+    for agent in agents:
+        oid = agent.pop('_oid')
+        owner_filter = "t.hubspot_owner_id = ?" if oid else "t.hubspot_owner_id IS NULL"
+        params = [oid] if oid else []
+        bucket_tickets = {}
+        for bucket_key, condition in [
+            ('d7', 'julianday(\'now\') - julianday(t.createdate) <= 7'),
+            ('d30', 'julianday(\'now\') - julianday(t.createdate) > 7 AND julianday(\'now\') - julianday(t.createdate) <= 30'),
+            ('d90', 'julianday(\'now\') - julianday(t.createdate) > 30 AND julianday(\'now\') - julianday(t.createdate) <= 90'),
+            ('d90plus', 'julianday(\'now\') - julianday(t.createdate) > 90'),
+        ]:
+            tid_rows = conn.execute(f"""
+                SELECT t.id FROM tickets t
+                JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = t.hs_pipeline_stage
+                JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+                WHERE ps.is_closed = 0 AND p.is_legacy = 0 AND p.is_active_support = 1
+                  AND {owner_filter} AND {condition}
+                ORDER BY t.createdate DESC LIMIT 50
+            """, params).fetchall()
+            bucket_tickets[bucket_key] = _ticket_details(conn, [r[0] for r in tid_rows])
+        agent['tickets'] = bucket_tickets
+
     agents.sort(key=lambda x: x['open'], reverse=True)
     return agents
 
 
 def collect_heatmap(conn: sqlite3.Connection) -> list[list[int]]:
-    """7x24 grid: rows=day-of-week (0=Mon), cols=hour. Uses last 90 days of tickets."""
     rows = conn.execute("""
         SELECT
             CAST(strftime('%w', t.createdate) AS INTEGER) as dow,
@@ -677,17 +784,15 @@ def collect_heatmap(conn: sqlite3.Connection) -> list[list[int]]:
           AND julianday('now') - julianday(t.createdate) <= 90
         GROUP BY dow, hr
     """).fetchall()
-    # SQLite %w: 0=Sunday. Convert to Mon=0..Sun=6.
     grid = [[0]*24 for _ in range(7)]
     for dow, hr, n in rows:
-        idx = (dow - 1) % 7  # Sun(0)->6, Mon(1)->0, Tue(2)->1, ...
+        idx = (dow - 1) % 7
         grid[idx][hr] = n
     return grid
 
 
 def _type_trend_for(conn: sqlite3.Connection, type_col: str,
                      pipeline_filter: str) -> dict:
-    """Helper: monthly type trend for a specific type column and pipeline set."""
     top_types = conn.execute(f"""
         SELECT COALESCE(NULLIF(t.[{type_col}], ''), '') as tt, COUNT(*) as n
         FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
@@ -725,18 +830,10 @@ def _type_trend_for(conn: sqlite3.Connection, type_col: str,
     return {'types': type_names, 'months': months, 'series': series}
 
 
-# GIJ pipeline IDs
 _GIJ_PIPELINE_IDS = {'6777488', '6906791', '736948125'}
 
 def collect_type_trend(conn: sqlite3.Connection) -> dict:
-    """Monthly ticket type trend, split by product family.
-
-    Returns {'gk': {...}, 'gij': {...}} where each has types/months/series.
-    GK/GitLens uses ticket_type + ticket_type__gitlens___support_.
-    GIJ uses ticket_type__gij___support_.
-    """
     gij_csv = ','.join(f"'{p}'" for p in _GIJ_PIPELINE_IDS)
-
     gk = _type_trend_for(conn, 'ticket_type',
                           f"t.hs_pipeline NOT IN ({gij_csv})")
     gij = _type_trend_for(conn, 'ticket_type__gij___support_',
@@ -745,7 +842,6 @@ def collect_type_trend(conn: sqlite3.Connection) -> dict:
 
 
 def collect_touches(conn: sqlite3.Connection, start: str, end: str) -> dict:
-    """Ticket touch/interaction count distribution using hs_num_times_contacted."""
     rows = conn.execute("""
         SELECT CAST(t.hs_num_times_contacted AS INTEGER) as touches, COUNT(*) as n
         FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
@@ -772,7 +868,6 @@ def collect_touches(conn: sqlite3.Connection, start: str, end: str) -> dict:
         else:
             buckets['11+'] += n
 
-    # Per-agent average
     agent_rows = conn.execute("""
         SELECT t.hubspot_owner_id, o.name,
             AVG(CAST(t.hs_num_times_contacted AS REAL)) as avg_touches,
@@ -805,7 +900,6 @@ def collect_touches(conn: sqlite3.Connection, start: str, end: str) -> dict:
 
 
 def collect_ticket_type(conn: sqlite3.Connection, start: str, end: str) -> dict:
-    """Ticket type breakdown split by product family: gk vs gij."""
     gij_csv = ','.join(f"'{p}'" for p in _GIJ_PIPELINE_IDS)
 
     gk_rows = conn.execute(f'''
@@ -815,8 +909,10 @@ def collect_ticket_type(conn: sqlite3.Connection, start: str, end: str) -> dict:
             'Unknown'
         ) as tt, COUNT(*) as n
         FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+        JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = t.hs_pipeline_stage
         WHERE p.is_legacy = 0 AND t.createdate >= ? AND t.createdate < ?
           AND t.hs_pipeline NOT IN ({gij_csv})
+          AND ps.label != 'New'
         GROUP BY tt ORDER BY n DESC LIMIT 12
     ''', (start, end)).fetchall()
 
@@ -826,14 +922,45 @@ def collect_ticket_type(conn: sqlite3.Connection, start: str, end: str) -> dict:
             'Unknown'
         ) as tt, COUNT(*) as n
         FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+        JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = t.hs_pipeline_stage
         WHERE p.is_legacy = 0 AND t.createdate >= ? AND t.createdate < ?
           AND t.hs_pipeline IN ({gij_csv})
+          AND ps.label != 'New'
         GROUP BY tt ORDER BY n DESC LIMIT 12
     ''', (start, end)).fetchall()
 
+    def _ticket_details_for_type(type_val, family):
+        if family == 'gk':
+            detail_rows = conn.execute(f'''
+                SELECT t.id, t.hs_ticket_id, p.label as pipeline, o.name as owner, t.createdate
+                FROM tickets t
+                JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+                JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = t.hs_pipeline_stage
+                LEFT JOIN owners o ON o.owner_id = t.hubspot_owner_id
+                WHERE p.is_legacy = 0 AND t.createdate >= ? AND t.createdate < ?
+                  AND t.hs_pipeline NOT IN ({gij_csv})
+                  AND ps.label != 'New'
+                  AND COALESCE(NULLIF(t.[ticket_type__gitlens___support_], ''), NULLIF(t.ticket_type, ''), 'Unknown') = ?
+                ORDER BY t.createdate DESC LIMIT 50
+            ''', (start, end, type_val)).fetchall()
+        else:
+            detail_rows = conn.execute(f'''
+                SELECT t.id, t.hs_ticket_id, p.label as pipeline, o.name as owner, t.createdate
+                FROM tickets t
+                JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+                JOIN pipeline_stages ps ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = t.hs_pipeline_stage
+                LEFT JOIN owners o ON o.owner_id = t.hubspot_owner_id
+                WHERE p.is_legacy = 0 AND t.createdate >= ? AND t.createdate < ?
+                  AND t.hs_pipeline IN ({gij_csv})
+                  AND ps.label != 'New'
+                  AND COALESCE(NULLIF(t.[ticket_type__gij___support_], ''), 'Unknown') = ?
+                ORDER BY t.createdate DESC LIMIT 50
+            ''', (start, end, type_val)).fetchall()
+        return [{'id': r[0], 'hs_ticket_id': r[1], 'pipeline': r[2], 'owner': r[3], 'created': r[4]} for r in detail_rows]
+
     return {
-        'gk': [{'type': r[0], 'n': r[1]} for r in gk_rows],
-        'gij': [{'type': r[0], 'n': r[1]} for r in gij_rows],
+        'gk': [{'type': r[0], 'n': r[1], 'tickets': _ticket_details_for_type(r[0], 'gk')} for r in gk_rows],
+        'gij': [{'type': r[0], 'n': r[1], 'tickets': _ticket_details_for_type(r[0], 'gij')} for r in gij_rows],
     }
 
 
@@ -844,7 +971,21 @@ def collect_product(conn: sqlite3.Connection, start: str, end: str) -> list[dict
         WHERE p.is_legacy = 0 AND t.createdate >= ? AND t.createdate < ?
         GROUP BY prod ORDER BY n DESC LIMIT 10
     ''', (start, end)).fetchall()
-    return [{'product': r[0], 'n': r[1]} for r in rows]
+
+    results = []
+    for r in rows:
+        detail_rows = conn.execute('''
+            SELECT t.id, t.hs_ticket_id, p.label as pipeline, o.name as owner, t.createdate
+            FROM tickets t
+            JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
+            LEFT JOIN owners o ON o.owner_id = t.hubspot_owner_id
+            WHERE p.is_legacy = 0 AND t.createdate >= ? AND t.createdate < ?
+              AND COALESCE(t.product_s_, 'Unknown') = ?
+            ORDER BY t.createdate DESC LIMIT 50
+        ''', (start, end, r[0])).fetchall()
+        tickets = [{'id': d[0], 'hs_ticket_id': d[1], 'pipeline': d[2], 'owner': d[3], 'created': d[4]} for d in detail_rows]
+        results.append({'product': r[0], 'n': r[1], 'tickets': tickets})
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -852,20 +993,16 @@ def collect_product(conn: sqlite3.Connection, start: str, end: str) -> list[dict
 # ---------------------------------------------------------------------------
 
 def _period_ranges(now: datetime) -> dict[str, tuple[str, str]]:
-    """Return {period_key: (start_iso, end_iso)} for dashboard periods + previous periods."""
-    # Week = last completed ISO week
     monday = now - timedelta(days=now.weekday())
     last_mon = monday - timedelta(weeks=1)
     week_s = last_mon.strftime('%Y-%m-%dT00:00:00Z')
     week_e = monday.strftime('%Y-%m-%dT00:00:00Z')
 
-    # Month = last completed calendar month
     first_of_month = now.replace(day=1)
     month_e = first_of_month.strftime('%Y-%m-%dT00:00:00Z')
     prev = first_of_month - timedelta(days=1)
     month_s = prev.replace(day=1).strftime('%Y-%m-%dT00:00:00Z')
 
-    # Quarter = last completed quarter
     cur_q = (now.month - 1) // 3 + 1
     q_start_month = (cur_q - 1) * 3 + 1
     cur_q_start = datetime(now.year, q_start_month, 1, tzinfo=timezone.utc)
@@ -880,7 +1017,6 @@ def _period_ranges(now: datetime) -> dict[str, tuple[str, str]]:
     quarter_s = prev_q_start.strftime('%Y-%m-%dT00:00:00Z')
     quarter_e = prev_q_end.strftime('%Y-%m-%dT00:00:00Z')
 
-    # Current quarter
     cur_q_s = cur_q_start.strftime('%Y-%m-%dT00:00:00Z')
     end_month = q_start_month + 3
     end_year = now.year
@@ -889,7 +1025,6 @@ def _period_ranges(now: datetime) -> dict[str, tuple[str, str]]:
         end_year += 1
     cur_q_e = f'{end_year}-{end_month:02d}-01T00:00:00Z'
 
-    # Previous periods (for KPI deltas)
     prev_week_s = (last_mon - timedelta(weeks=1)).strftime('%Y-%m-%dT00:00:00Z')
     prev_week_e = week_s
 
@@ -923,17 +1058,14 @@ def _period_ranges(now: datetime) -> dict[str, tuple[str, str]]:
 # ---------------------------------------------------------------------------
 
 def compute() -> dict:
-    """Collect all dashboard data and return as a single dict."""
     conn = connect()
     now = datetime.now(timezone.utc)
     periods = _period_ranges(now)
 
     log.info("Collecting weekly trend data...")
     weekly = collect_weekly(conn, now)
-
     log.info("Collecting monthly trend data...")
     monthly = collect_monthly(conn)
-
     log.info("Collecting quarterly trend data...")
     quarterly = collect_quarterly(conn)
 
@@ -971,7 +1103,6 @@ def compute() -> dict:
 
     log.info("Collecting resolution rate trend...")
     res_trend = collect_resolution_trend(conn)
-
     aging, open_total = collect_aging(conn)
 
     log.info("Collecting workload, heatmap, type trends...")
@@ -979,7 +1110,6 @@ def compute() -> dict:
     heatmap = collect_heatmap(conn)
     type_trend = collect_type_trend(conn)
 
-    # Sync metadata
     sync_row = conn.execute(
         "SELECT ended_at FROM sync_runs WHERE status='success' ORDER BY ended_at DESC LIMIT 1"
     ).fetchone()
@@ -1023,7 +1153,6 @@ def compute() -> dict:
 
 
 def generate_html(data: dict) -> str:
-    """Generate the full HTML dashboard string with data embedded."""
     import re
     template_path = Path(__file__).parent.parent / 'outputs' / 'dashboard.html'
     html = template_path.read_text(encoding='utf-8')
@@ -1040,8 +1169,9 @@ def generate_html(data: dict) -> str:
 
     data_json = json.dumps(data_without_meta, indent=None, default=str)
     pattern = r'const DATA = \{.*?\};'
-    replacement = f'const DATA = {data_json};'
-    html = re.sub(pattern, replacement, html, count=1, flags=re.DOTALL)
+    m = re.search(pattern, html, flags=re.DOTALL)
+    if m:
+        html = html[:m.start()] + f'const DATA = {data_json};' + html[m.end():]
 
     html = re.sub(
         r'Data synced.*?owners',

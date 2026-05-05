@@ -64,4 +64,5 @@ JOIN tickets t ON t.id = ec.ticket_id
 JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
 LEFT JOIN owners o ON o.owner_id = CAST(t.hubspot_owner_id AS INTEGER)
 LEFT JOIN reopen_counts rc ON rc.ticket_id = t.id
-WHERE (:include_legacy = 1 OR p.is_legacy = 0);
+WHERE (:include_legacy = 1 OR p.is_legacy = 0)
+  AND t.bulk_close_tag IS NULL;

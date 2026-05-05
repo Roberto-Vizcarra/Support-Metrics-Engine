@@ -39,5 +39,6 @@ JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
 LEFT JOIN owners o ON o.owner_id = CAST(t.hubspot_owner_id AS INTEGER)
 LEFT JOIN first_close fc ON fc.ticket_id = t.id
 WHERE (:include_legacy = 1 OR p.is_legacy = 0)
+  AND t.bulk_close_tag IS NULL
   AND (:start IS NULL OR fc.first_close_at >= :start)
   AND (:end   IS NULL OR fc.first_close_at <  :end);

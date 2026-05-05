@@ -27,6 +27,7 @@ from sync.sync_feedback import sync_feedback_for_tickets
 from sync.sync_owners import sync_owners
 from sync.sync_stage_history import rebuild_for_tickets
 from sync.sync_tickets import sync_tickets_full, sync_tickets_incremental
+from reports.weekly_snapshot import rebuild_weekly_metrics
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +43,6 @@ def last_successful_sync() -> datetime | None:
         ts = row[0] if row else None
         if not ts:
             return None
-        # Stored as ISO 8601 UTC; normalize parse
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
     finally:
         conn.close()
@@ -122,10 +122,10 @@ def run_full(*, dry_run: bool = False, limit: int | None = None) -> dict:
               "transitions_rebuilt": 0, "feedback_synced": 0, "owners_synced": 0}
     notes_parts: list[str] = []
     try:
-        log.info("Step 1/4: owners")
+        log.info("Step 1/5: owners")
         counts["owners_synced"] = sync_owners()
 
-        log.info("Step 2/4: tickets")
+        log.info("Step 2/5: tickets")
         ticket_result = sync_tickets_full(limit=limit)
         counts["tickets_added"] = ticket_result["added"]
         counts["tickets_updated"] = ticket_result["updated"]
@@ -137,13 +137,13 @@ def run_full(*, dry_run: bool = False, limit: int | None = None) -> dict:
             )
 
         modified_ids = ticket_result["modified_ids"]
-        log.info("Step 3/4: stage transitions for %d tickets", len(modified_ids))
+        log.info("Step 3/5: stage transitions for %d tickets", len(modified_ids))
         st_result = rebuild_for_tickets(modified_ids)
         counts["transitions_rebuilt"] = st_result["transitions_inserted"]
         if st_result["errors"]:
             notes_parts.append(f"stage_history_errors={st_result['errors']}")
 
-        log.info("Step 4/4: feedback for %d tickets", len(modified_ids))
+        log.info("Step 4/5: feedback for %d tickets", len(modified_ids))
         fb_result = sync_feedback_for_tickets(modified_ids)
         counts["feedback_synced"] = fb_result["synced"]
         if fb_result.get("scope_missing"):
@@ -151,6 +151,9 @@ def run_full(*, dry_run: bool = False, limit: int | None = None) -> dict:
                 "feedback_submissions_scope_missing — add "
                 "crm.objects.feedback_submissions.read to enable per-survey reports"
             )
+
+        log.info("Step 5/5: weekly metrics snapshot")
+        rebuild_weekly_metrics()
 
         notes = "; ".join(notes_parts) or None
         _finish_run(run_id, status="success", counts=counts, notes=notes)
@@ -193,6 +196,9 @@ def run_incremental(*, dry_run: bool = False, limit: int | None = None) -> dict:
             counts["feedback_synced"] = fb["synced"]
             if fb.get("scope_missing"):
                 notes_parts.append("feedback_submissions_scope_missing")
+
+        log.info("Rebuilding weekly metrics snapshot...")
+        rebuild_weekly_metrics()
 
         notes = "; ".join(notes_parts) or None
         status = "success" if counts["tickets_skipped"] == 0 else "partial"

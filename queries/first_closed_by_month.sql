@@ -13,6 +13,7 @@ WITH first_close AS (
     JOIN pipeline_stages ps
       ON ps.pipeline_id = t.hs_pipeline AND ps.stage_id = st.to_stage
     WHERE ps.is_closed = 1
+      AND t.bulk_close_tag IS NULL
     GROUP BY t.id
 )
 SELECT

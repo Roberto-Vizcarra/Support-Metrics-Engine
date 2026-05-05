@@ -225,6 +225,7 @@ Option 2: I need help to convince the team
 Option 3: It cost"
 unconverted_feedback___text,Unconverted Feedback - Text,string,ticketinformation,KEEP,,"Related to the Unconverted Feedback field. If an unconverted trial user provides additional information in free text, paste their response here. "
 within_refund_period,Within Refund Period,enumeration,ticketinformation,KEEP,,"Used by the Refund Request workflow. When a ticket asking for a refund is submitted, the result of workflow logic that determines the request was made within the refund period is stored here, for late"
+bulk_close_tag,Bulk Close Tag,string,ticketinformation,KEEP,,Date-stamp tag applied to tickets bulk-closed by automation. Used to filter them from time-to-close and volume metrics.
 account_type_ticket_only_,Account-Type (Ticket Only),enumeration,ticketinformation,EXCLUDE,customer account identification,Account type
 company,Company,string,ticketinformation,EXCLUDE,company-related (likely customer),
 contact_purpose,What do you need help with?,enumeration,ticketinformation,EXCLUDE,customer PII,

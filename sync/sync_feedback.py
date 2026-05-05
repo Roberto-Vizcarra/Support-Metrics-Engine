@@ -160,6 +160,7 @@ def sync_feedback_for_tickets(ticket_ids: list[str]) -> dict:
                 rows,
             )
     finally:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.close()
 
     return {"synced": len(rows), "errors": read_errors + assoc_errors, "scope_missing": False}
