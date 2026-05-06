@@ -1154,7 +1154,7 @@ def compute() -> dict:
 
 def generate_html(data: dict) -> str:
     import re
-    template_path = Path(__file__).parent.parent / 'outputs' / 'dashboard.html'
+    template_path = Path(__file__).parent.parent / 'templates' / 'dashboard.html'
     html = template_path.read_text(encoding='utf-8')
 
     meta = data['_meta']

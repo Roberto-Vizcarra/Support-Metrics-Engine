@@ -1,0 +1,2332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Support Metrics Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root {
+  --bg-primary: #0f1117;
+  --bg-secondary: #1a1d27;
+  --bg-tertiary: #242836;
+  --bg-hover: #2d3245;
+  --text-primary: #e4e5e9;
+  --text-secondary: #9ca0ab;
+  --text-tertiary: #6b7080;
+  --border: rgba(255,255,255,0.08);
+  --border-hover: rgba(255,255,255,0.15);
+  --accent-blue: #5b8def;
+  --accent-green: #34d399;
+  --accent-purple: #a78bfa;
+  --accent-coral: #f0997b;
+  --accent-red: #f87171;
+  --accent-amber: #fbbf24;
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg-primary); color: var(--text-primary); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 2rem; max-width: 1000px; margin: 0 auto; }
+h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+.subtitle { font-size: 12px; color: var(--text-tertiary); margin-bottom: 1.5rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem; align-items: center; }
+.control-group { display: flex; background: var(--bg-secondary); border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+.control-group label { font-size: 12px; color: var(--text-tertiary); padding: 6px 12px; display: flex; align-items: center; border-right: 1px solid var(--border); }
+.control-btn { background: transparent; border: none; color: var(--text-secondary); padding: 7px 14px; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+.control-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.control-btn.active { background: var(--accent-blue); color: #fff; }
+.export-btn { background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-secondary); padding: 6px 12px; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+.export-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.section { margin-bottom: 2rem; }
+.section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.section-title { font-size: 14px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
+.toolbar { display: flex; gap: 6px; align-items: center; }
+.toolbar button { background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-tertiary); cursor: pointer; padding: 3px 7px; font-size: 13px; transition: all 0.15s; }
+.toolbar button:hover { background: var(--bg-hover); color: var(--text-primary); }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; }
+.metric-card { background: var(--bg-secondary); border-radius: var(--radius); padding: 14px 16px; border: 1px solid var(--border); }
+.metric-label { font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
+.metric-value { font-size: 22px; font-weight: 600; }
+.metric-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; }
+.metric-delta { font-size: 11px; margin-top: 2px; }
+.delta-up { color: var(--accent-red); }
+.delta-down { color: var(--accent-green); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--text-tertiary); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+td { padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text-primary); }
+tr:hover td { background: var(--bg-tertiary); }
+td a { color: var(--accent-blue); text-decoration: none; }
+td a:hover { text-decoration: underline; }
+.chart-wrap { position: relative; width: 100%; height: 280px; background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 16px; border: 1px solid var(--border); margin-bottom: 10px; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; }
+.legend-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: middle; }
+.bar-bg { background: var(--bg-tertiary); border-radius: 3px; height: 14px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 3px; }
+.table-wrap { background: var(--bg-secondary); border-radius: var(--radius-lg); border: 1px solid var(--border); overflow: hidden; }
+.badge { display: inline-block; font-size: 11px; padding: 3px 10px; border-radius: var(--radius); }
+.badge-warn { background: rgba(251,191,36,0.15); color: var(--accent-amber); }
+.badge-info { background: rgba(91,141,239,0.15); color: var(--accent-blue); }
+.csat-card { background: var(--bg-secondary); border-radius: var(--radius); padding: 14px 16px; border: 1px solid var(--border); }
+.aging-grid { display: grid; grid-template-columns: 100px 60px 1fr; gap: 6px 12px; align-items: center; font-size: 13px; }
+.sw-group { display: inline-flex; background: var(--bg-tertiary); border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); margin-bottom: 8px; }
+.sw-btn { background: transparent; border: none; color: var(--text-secondary); padding: 5px 12px; font-size: 11px; cursor: pointer; transition: all 0.15s; }
+.sw-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.sw-btn.active { background: var(--accent-blue); color: #fff; }
+.hint { font-size: 11px; color: var(--text-tertiary); margin-top: 8px; font-style: italic; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
+/* Side-panel drill-down system */
+.section.has-sidepanel { max-width: 1400px; margin-left: auto; margin-right: auto; width: calc(100vw - 32px); padding: 0 16px; }
+@media (max-width: 1032px) { .section.has-sidepanel { width: 100%; } }
+.sidepanel-layout { display: flex; gap: 0; align-items: stretch; min-height: 300px; }
+.sidepanel-main { flex: 0 0 var(--main-width, 45%); min-width: 280px; overflow-y: auto; max-height: 600px; }
+.sidepanel-divider { flex: 0 0 6px; background: var(--bg-tertiary); cursor: col-resize; position: relative; border-radius: 3px; margin: 0 2px; transition: background 0.15s; }
+.sidepanel-divider:hover, .sidepanel-divider.dragging { background: var(--accent-blue); }
+.sidepanel-divider::after { content: ''; position: absolute; top: 50%; left: 1px; width: 4px; height: 32px; transform: translateY(-50%); border-left: 1px solid rgba(255,255,255,0.2); border-right: 1px solid rgba(255,255,255,0.2); }
+.sidepanel-detail { flex: 1; overflow-y: auto; max-height: 600px; padding-left: 16px; }
+.sidepanel-detail:empty { display: none; }
+.sp-breadcrumb { font-size: 11px; color: var(--text-tertiary); margin-bottom: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.sp-breadcrumb .sp-crumb { color: var(--accent-blue); cursor: pointer; }
+.sp-breadcrumb .sp-crumb:hover { text-decoration: underline; }
+.sp-breadcrumb .sp-sep { color: var(--text-tertiary); }
+.sp-filter-list { margin-bottom: 12px; }
+.sp-filter-item { padding: 6px 12px; font-size: 12px; cursor: pointer; border-radius: var(--radius); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; transition: all 0.1s; color: var(--text-secondary); }
+.sp-filter-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.sp-filter-item.active { background: var(--accent-blue); color: #fff; }
+.sp-filter-item .sp-count { font-size: 11px; opacity: 0.7; }
+.sp-section-label { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.3px; margin: 12px 0 6px; }
+.sp-close { position: absolute; top: 8px; right: 8px; background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-tertiary); cursor: pointer; padding: 2px 8px; font-size: 14px; z-index: 2; }
+.sp-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+/* Legacy drilldown kept for non-sidepanel use */
+.drilldown-panel { display: none; margin-top: 12px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; max-height: 500px; overflow-y: auto; }
+.drilldown-panel.open { display: block; }
+.drilldown-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.drilldown-header h3 { font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0; }
+.drilldown-close { background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-tertiary); cursor: pointer; padding: 2px 8px; font-size: 14px; }
+.drilldown-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+.stage-pipeline { margin-bottom: 16px; }
+.stage-pipeline h3 { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; }
+.heatmap-table { border-collapse: collapse; font-size: 11px; width: 100%; }
+.heatmap-table th, .heatmap-table td { padding: 4px 6px; text-align: center; }
+.heatmap-table th { color: var(--text-tertiary); font-weight: 500; text-transform: none; letter-spacing: 0; font-size: 11px; border-bottom: none; }
+.heatmap-cell { border-radius: 3px; min-width: 28px; }
+tr[onclick]:hover td, tr[style*="cursor:pointer"]:hover td { background: var(--bg-hover); }
+.collapsible { cursor: pointer; user-select: none; }
+.collapsible::before { content: '\25B6'; display: inline-block; margin-right: 6px; font-size: 10px; transition: transform 0.15s; }
+.collapsible.open::before { transform: rotate(90deg); }
+.collapsible-body { display: none; padding-left: 16px; }
+.collapsible-body.open { display: block; }
+.stage-owner-row { font-size: 12px; }
+.stage-owner-row td { padding: 6px 12px; }
+.chart-tooltip { position: absolute; pointer-events: none; background: var(--bg-tertiary); border: 1px solid var(--border-hover); border-radius: var(--radius); padding: 10px 14px; font-size: 12px; color: var(--text-primary); z-index: 100; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: opacity 0.15s; }
+.chart-tooltip .tt-title { font-weight: 600; margin-bottom: 6px; font-size: 12px; color: var(--text-primary); }
+.chart-tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; margin: 3px 0; }
+.chart-tooltip .tt-label { color: var(--text-secondary); }
+.chart-tooltip .tt-value { font-weight: 500; }
+.chart-tooltip .tt-delta { font-size: 11px; }
+.chart-tooltip .tt-hint { font-size: 10px; color: var(--text-tertiary); margin-top: 4px; font-style: italic; }
+#expandModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
+#expandModal.open { display: flex; }
+.modal-content { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 90vw; max-width: 1100px; max-height: 90vh; overflow-y: auto; padding: 24px; position: relative; }
+.modal-close { position: absolute; top: 12px; right: 16px; background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-tertiary); cursor: pointer; padding: 4px 10px; font-size: 18px; }
+.modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+.modal-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text-primary); }
+@media (max-width: 600px) {
+  body { padding: 1rem; }
+  .metric-grid { grid-template-columns: 1fr 1fr; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .controls { flex-direction: column; align-items: stretch; }
+}
+@media print {
+  body { background: #fff; color: #000; }
+  .controls, .toolbar, .export-btn, .drilldown-panel, #expandModal { display: none !important; }
+}
+</style>
+</head>
+<body>
+
+<h1>Support metrics engine</h1>
+<div class="subtitle" id="subtitle">Data synced 2026-05-06 &middot; 9,859 tickets &middot; 56,341 transitions &middot; 193 owners</div>
+
+<div class="controls">
+  <div class="control-group">
+    <label>Period</label>
+    <button class="control-btn active" data-period="week" onclick="setPeriod('week')">Week</button>
+    <button class="control-btn" data-period="month" onclick="setPeriod('month')">Month</button>
+    <button class="control-btn" data-period="quarter" onclick="setPeriod('quarter')">QoQ</button>
+    <button class="control-btn" data-period="current_quarter" onclick="setPeriod('current_quarter')">Current Q</button>
+  </div>
+  <div class="control-group">
+    <label>Metric</label>
+    <button class="control-btn active" data-metric="median" onclick="setMetric('median')">Median</button>
+    <button class="control-btn" data-metric="mean" onclick="setMetric('mean')">Average</button>
+  </div>
+  <button class="export-btn" onclick="exportHtml()">Export HTML</button>
+  <button class="export-btn" onclick="exportPdf()">Export PDF</button>
+</div>
+
+<!-- KPI Cards -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-title" title="Summary KPIs for the selected time period — TTC, FRT, open backlog, reopen rate, created/closed counts with deltas vs prior period">Key metrics</div>
+    <div class="toolbar"><button onclick="expandSection('kpi')" title="Expand">&#10530;</button></div>
+  </div>
+  <div class="metric-grid" id="kpi-grid"></div>
+</div>
+
+<!-- Ticket Volume Trend -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-title" title="Created vs closed tickets over time — tracks whether the backlog is growing or shrinking">Ticket volume trend</div>
+    <div class="toolbar">
+      <div class="control-group">
+        <button class="control-btn active" onclick="setVolView('chart',this)">Chart</button>
+        <button class="control-btn" onclick="setVolView('table',this)">Table</button>
+      </div>
+      <button onclick="expandSection('vol')" title="Expand">&#10530;</button>
+    </div>
+  </div>
+  <div id="vol-legend" class="legend">
+    <span><span class="legend-dot" style="background:#5b8def"></span>Created</span>
+    <span><span class="legend-dot" style="background:#34d399"></span>Closed</span>
+  </div>
+  <div id="vol-chart-wrap" class="chart-wrap"><canvas id="volChart"></canvas></div>
+  <div id="vol-table-wrap" class="table-wrap" style="display:none"></div>
+</div>
+
+<!-- TTC & FRT Trend -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-title"><span id="ttc-frt-label">Median TTC &amp; FRT trend</span></div>
+    <div class="toolbar"><button onclick="expandSection('ttcfrt')" title="Expand">&#10530;</button></div>
+  </div>
+  <div class="legend">
+    <span><span class="legend-dot" style="background:#a78bfa"></span><span id="ttc-legend-label">Median TTC (days)</span></span>
+    <span><span class="legend-dot" style="background:#f0997b"></span><span id="frt-legend-label">Median FRT (hours)</span></span>
+  </div>
+  <div class="chart-wrap"><canvas id="ttcChart"></canvas></div>
+</div>
+
+<!-- Rep Performance -->
+<div class="section" id="rep-section">
+  <div class="section-head">
+    <div class="section-title" title="Per-agent TTC, FRT, and closed count — click a rep to drill down with type/product filters">Rep performance</div>
+    <div class="toolbar"><button onclick="expandSection('rep')" title="Expand">&#10530;</button></div>
+  </div>
+  <div class="table-wrap">
+    <table id="rep-table">
+      <thead><tr><th>Rep</th><th id="rep-ttc-header">Median TTC</th><th id="rep-frt-header">Median FRT</th><th>Closed</th></tr></thead>
+      <tbody id="rep-body"></tbody>
+    </table>
+  </div>
+  <div class="hint">Click a rep to drill down &middot; then filter by type or product</div>
+</div>
+
+<!-- Pipeline FRT -->
+<div class="section" id="pipefrt-section">
+  <div class="section-head">
+    <div class="section-title"><span id="pipe-frt-label">First response time by pipeline</span></div>
+    <div class="toolbar">
+      <div class="control-group">
+        <button class="control-btn active" onclick="setPipeFrtView('table',this)">Table</button>
+        <button class="control-btn" onclick="setPipeFrtView('chart',this)">Chart</button>
+      </div>
+      <button onclick="expandSection('pipefrt')" title="Expand">&#10530;</button>
+    </div>
+  </div>
+  <div id="pipefrt-table-wrap" class="table-wrap">
+    <table id="pipe-table">
+      <thead><tr><th>Pipeline</th><th>Tickets</th><th id="pipe-frt-header">Median FRT</th><th style="width:35%"></th></tr></thead>
+      <tbody id="pipe-body"></tbody>
+    </table>
+  </div>
+  <div id="pipefrt-chart-wrap" class="chart-wrap" style="display:none"><canvas id="pipeFrtBarChart"></canvas></div>
+  <div class="hint">Click a pipeline row to drill down with filters</div>
+</div>
+
+<!-- Pipeline Volume -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-title" title="Created, closed, and open tickets by pipeline for the selected period">Pipeline volume</div>
+    <div class="toolbar">
+      <div class="control-group">
+        <button class="control-btn active" onclick="setPipeVolView('chart',this)">Chart</button>
+        <button class="control-btn" onclick="setPipeVolView('table',this)">Table</button>
+      </div>
+      <button onclick="expandSection('pipevol')" title="Expand">&#10530;</button>
+    </div>
+  </div>
+  <div id="pipevol-chart-wrap" class="chart-wrap" style="height:300px"><canvas id="pipeVolChart"></canvas></div>
+  <div id="pipevol-table-wrap" class="table-wrap" style="display:none"></div>
+</div>
+
+<!-- Stage Time -->
+<div class="section" id="stage-section">
+  <div class="section-head">
+    <div class="section-title" title="How long tickets spend in each pipeline stage — grouped by pipeline, with per-owner breakdown">Stage time</div>
+    <div class="toolbar"><button onclick="expandSection('stage')" title="Expand">&#10530;</button></div>
+  </div>
+  <div id="stage-table-wrap"></div>
+</div>
+
+<!-- Backlog Aging -->
+<div class="section" id="aging-sec">
+  <div class="section-head">
+    <div class="section-title" title="Current open tickets by age bucket — shows how much of the backlog is stale">Backlog aging <span class="badge badge-info">Current snapshot</span></div>
+    <div class="toolbar"><button onclick="expandSection('aging')" title="Expand">&#10530;</button></div>
+  </div>
+  <div style="background:var(--bg-secondary);border-radius:var(--radius-lg);border:1px solid var(--border);padding:16px" id="aging-section"></div>
+  <div class="hint">Click a bucket to drill down with owner/type/product filters</div>
+</div>
+
+<!-- SLA Compliance -->
+<div class="section" id="sla-section">
+  <div class="section-head">
+    <div class="section-title" title="First response SLA met/breached rates — click breached counts to see tickets">SLA compliance</div>
+    <div class="toolbar"><button onclick="expandSection('sla')" title="Expand">&#10530;</button></div>
+  </div>
+  <div id="sla-overall" class="summary-cards"></div>
+  <div class="table-wrap" id="sla-table-wrap"></div>
+</div>
+
+<!-- One-Touch Resolution -->
+<div class="section" id="onetouch-section">
+  <div class="section-head">
+    <div class="section-title" title="Tickets resolved with a single agent response — click an agent to see their one-touch tickets">One-touch resolution</div>
+    <div class="toolbar"><button onclick="expandSection('onetouch')" title="Expand">&#10530;</button></div>
+  </div>
+  <div id="onetouch-summary" class="summary-cards"></div>
+  <div class="table-wrap" id="onetouch-table-wrap"></div>
+  <div class="hint">Click an agent to drill down with filters</div>
+</div>
+
+<!-- Workload Distribution -->
+<div class="section" id="workload-section">
+  <div class="section-head">
+    <div class="section-title" title="Current open ticket count per agent by age bucket — shows who has the most and oldest tickets">Workload distribution</div>
+    <div class="toolbar"><button onclick="expandSection('workload')" title="Expand">&#10530;</button></div>
+  </div>
+  <div class="table-wrap" id="workload-table-wrap"></div>
+  <div class="hint">Click an agent or bucket to drill down with filters</div>
+</div>
+
+<!-- Ticket Types & Product -->
+<div class="section" id="tickettype-section">
+  <div class="section-head">
+    <div class="section-title" title="Issue type distribution by pipeline family (left) and product distribution across all pipelines (right) — click segments to drill down">Ticket types &amp; product</div>
+    <div class="toolbar"><button onclick="expandSection('tickettype')" title="Expand">&#10530;</button></div>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div class="sw-group" id="type-family-sw" style="margin-bottom:0">
+          <button class="sw-btn active" onclick="setTypeFamily('gk',this)">GKD / GitLens</button>
+          <button class="sw-btn" onclick="setTypeFamily('gij',this)">GIJ</button>
+        </div>
+        <span style="font-size:10px;color:var(--text-tertiary)" title="Ticket type breakdown for the selected pipeline family in the current period">Issue type breakdown</span>
+      </div>
+      <div class="chart-wrap" style="height:280px"><canvas id="typeChart"></canvas></div>
+    </div>
+    <div>
+      <div style="height:33px;display:flex;align-items:center">
+        <span style="font-size:10px;color:var(--text-tertiary)" title="Distribution of tickets across all products in the current period">Product breakdown (all pipelines)</span>
+      </div>
+      <div class="chart-wrap" style="height:280px"><canvas id="productChart"></canvas></div>
+    </div>
+  </div>
+  </div>
+
+<!-- CSAT -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-title" title="CSAT survey results — average rating out of 7, response count, positive/negative split">Customer satisfaction</div>
+    <div class="toolbar"><button onclick="expandSection('csat')" title="Expand">&#10530;</button></div>
+  </div>
+  <div class="metric-grid" id="csat-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))"></div>
+</div>
+
+<!-- Reopen Rate -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-title" title="Percentage of closed tickets that were later reopened">Reopen rate</div>
+    <div class="toolbar"><button onclick="expandSection('reopen')" title="Expand">&#10530;</button></div>
+  </div>
+  <div id="reopen-cards" class="summary-cards"></div>
+</div>
+
+<!-- Touches Distribution -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-title" title="Number of agent replies per ticket — shows effort distribution and per-agent averages">Touches distribution</div>
+    <div class="toolbar"><button onclick="expandSection('touches')" title="Expand">&#10530;</button></div>
+  </div>
+  <div class="grid-2">
+    <div class="chart-wrap" style="height:250px"><canvas id="touchesChart"></canvas></div>
+    <div>
+      <div id="touches-summary" style="font-size:12px;color:var(--text-tertiary);margin-bottom:8px"></div>
+      <div class="table-wrap" id="touches-table-wrap"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Heatmap -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-title" title="When tickets are created by day of week and hour (UTC) — last 90 days">Ticket creation heatmap</div>
+    <div class="toolbar"><button onclick="expandSection('heatmap')" title="Expand">&#10530;</button></div>
+  </div>
+  <div style="background:var(--bg-secondary);border-radius:var(--radius-lg);border:1px solid var(--border);padding:16px" id="heatmap-wrap"></div>
+</div>
+
+<!-- Resolution Rate Trend -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-title" title="Created vs closed per period with resolution rate % — shows whether the team is keeping up">Resolution rate trend</div>
+    <div class="toolbar">
+      <div class="control-group">
+        <button class="control-btn active" onclick="setResTrendView('chart',this)">Chart</button>
+        <button class="control-btn" onclick="setResTrendView('table',this)">Table</button>
+      </div>
+      <button onclick="expandSection('restrend')" title="Expand">&#10530;</button>
+    </div>
+  </div>
+  <div id="restrend-legend" class="legend">
+    <span><span class="legend-dot" style="background:#5b8def"></span>Created</span>
+    <span><span class="legend-dot" style="background:#34d399"></span>Closed</span>
+    <span><span class="legend-dot" style="background:#a78bfa"></span>Resolution Rate %</span>
+  </div>
+  <div id="restrend-chart-wrap" class="chart-wrap"><canvas id="resTrendChart"></canvas></div>
+  <div id="restrend-table-wrap" class="table-wrap" style="display:none"></div>
+</div>
+
+<!-- Type Trends -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-title" title="Monthly stacked area chart of ticket types — shows which issue categories are growing or declining">Type trends</div>
+    <div class="toolbar">
+      <div class="sw-group" id="type-trend-sw">
+        <button class="sw-btn active" onclick="setTypeTrendFamily('gk',this)">GKD / GitLens</button>
+        <button class="sw-btn" onclick="setTypeTrendFamily('gij',this)">GIJ</button>
+      </div>
+      <button onclick="expandSection('typetrend')" title="Expand">&#10530;</button>
+    </div>
+  </div>
+  <div class="chart-wrap" style="height:300px"><canvas id="typeTrendChart"></canvas></div>
+</div>
+
+<!-- Expand Modal -->
+<div id="expandModal">
+  <div class="modal-content">
+    <button class="modal-close" onclick="closeModal()">&times;</button>
+    <div class="modal-title" id="modal-title"></div>
+    <div class="chart-wrap" id="modal-chart-wrap"><canvas id="modalChart"></canvas></div>
+    <div class="table-wrap" id="modal-table-wrap" style="margin-top:16px"></div>
+  </div>
+</div>
+
+<div style="text-align:center;padding:2rem 0;font-size:11px;color:var(--text-tertiary)">
+  Generated by Support Metrics Engine &middot; <span id="gen-date"></span>
+</div>
+
+<script>
+// ============================================================
+// EMBEDDED DATA
+// ============================================================
+const DATA = {};
+
+// ============================================================
+// STATE
+// ============================================================
+let currentPeriod = 'week';
+let currentMetric = 'median';
+let volView = 'chart';
+let pipeFrtView = 'table';
+let typeFamily = 'gk';
+let typeTrendFamily = 'gk';
+let pipeVolView = 'chart';
+
+let volChart, ttcChart, pipeVolChart, pipeFrtBarChartObj;
+let agingChartObj, typeChartObj, productChartObj;
+let touchesChartObj, resTrendChartObj, typeTrendChartObj;
+let modalChartObj;
+
+const COLORS = ['#5b8def','#34d399','#f87171','#fbbf24','#a78bfa','#f472b6','#fb923c','#38bdf8','#4ade80','#e879f9','#facc15','#22d3ee'];
+const GRID_COLOR = 'rgba(255,255,255,0.05)';
+const TICK_COLOR = '#6b7080';
+
+// ============================================================
+// HELPERS
+// ============================================================
+const fmtNum = n => n != null ? Number(n).toLocaleString() : '--';
+const msToHrs = ms => ms != null ? (ms / 3600000).toFixed(1) : '--';
+const msToDays = ms => ms != null ? (ms / 86400000).toFixed(1) : '--';
+function ttcKey() { return currentMetric === 'median' ? 'ttc_median_ms' : 'ttc_mean_ms'; }
+function frtKey() { return currentMetric === 'median' ? 'frt_median_ms' : 'frt_mean_ms'; }
+function stageTimeKey() { return currentMetric === 'median' ? 'median_ms' : 'mean_ms'; }
+function metricLabel() { return currentMetric === 'median' ? 'Median' : 'Average'; }
+function trendDataKey() {
+  if (currentPeriod === 'week') return 'weekly';
+  if (currentPeriod === 'month') return 'monthly';
+  return 'quarterly';
+}
+function prevPeriodKey() {
+  return { week:'prev_week', month:'prev_month', quarter:'prev_quarter', current_quarter:'prev_current_quarter' }[currentPeriod];
+}
+
+function deltaHtml(cur, prev, invertColor) {
+  if (cur == null || prev == null || prev === 0) return '';
+  const d = ((cur - prev) / prev * 100).toFixed(1);
+  if (d == 0) return '';
+  const up = d > 0;
+  const cls = invertColor ? (up ? 'delta-up' : 'delta-down') : (up ? 'delta-down' : 'delta-up');
+  return '<div class="metric-delta ' + cls + '">' + (up ? '+' : '') + d + '%</div>';
+}
+
+function hsLink(t) {
+  const id = t.hs_ticket_id || t.id;
+  return '<a href="https://app.hubspot.com/contacts/544893/ticket/' + id + '" target="_blank">' + id + '</a>';
+}
+
+function ticketTable(tickets) {
+  if (!tickets || !tickets.length) return '<p style="color:var(--text-tertiary);font-size:12px">No tickets</p>';
+  let h = '<table><thead><tr><th>Ticket</th><th>Pipeline</th><th>Owner</th><th>Type</th><th>Product</th><th>Created</th></tr></thead><tbody>';
+  tickets.forEach(t => {
+    h += '<tr><td>' + hsLink(t) + '</td><td>' + (t.pipeline||'') + '</td><td>' + (t.owner||'') + '</td><td>' + (t.type||'') + '</td><td>' + (t.product||'') + '</td><td>' + (t.created||'') + '</td></tr>';
+  });
+  return h + '</tbody></table>';
+}
+
+// ============================================================
+// ENHANCED TOOLTIP PLUGIN
+// ============================================================
+function getOrCreateTooltip(chart) {
+  let el = chart.canvas.parentNode.querySelector('.chart-tooltip');
+  if (!el) {
+    el = document.createElement('div');
+    el.classList.add('chart-tooltip');
+    chart.canvas.parentNode.appendChild(el);
+  }
+  return el;
+}
+
+function enhancedTooltipHandler(context, buildContent) {
+  const {chart, tooltip} = context;
+  const el = getOrCreateTooltip(chart);
+  if (tooltip.opacity === 0) { el.style.opacity = 0; return; }
+  el.innerHTML = buildContent(tooltip, chart);
+  el.style.opacity = 1;
+  const {offsetLeft, offsetTop} = chart.canvas;
+  el.style.left = offsetLeft + tooltip.caretX + 'px';
+  el.style.top = offsetTop + tooltip.caretY + 'px';
+  el.style.transform = 'translate(-50%, -110%)';
+}
+
+function ttVolume(tooltip) {
+  if (!tooltip.dataPoints || !tooltip.dataPoints.length) return '';
+  const dp = tooltip.dataPoints;
+  const label = dp[0].label;
+  const created = dp.find(d => d.dataset.label === 'Created');
+  const closed = dp.find(d => d.dataset.label === 'Closed');
+  const cVal = created ? created.parsed.y : 0;
+  const clVal = closed ? closed.parsed.y : 0;
+  const net = cVal - clVal;
+  const d = DATA[trendDataKey()];
+  const idx = dp[0].dataIndex;
+  let deltaHtml = '';
+  if (d && idx > 0) {
+    const prevC = d[idx-1] ? d[idx-1].created : null;
+    if (prevC && prevC > 0) { const pct = ((cVal - prevC)/prevC*100).toFixed(1); deltaHtml = '<div class="tt-delta" style="color:'+(pct>0?'var(--accent-red)':'var(--accent-green)')+'">'+(pct>0?'+':'')+pct+'% vs prior</div>'; }
+  }
+  return '<div class="tt-title">'+label+'</div>'
+    +'<div class="tt-row"><span class="tt-label" style="color:#5b8def">Created</span><span class="tt-value">'+fmtNum(cVal)+'</span></div>'
+    +'<div class="tt-row"><span class="tt-label" style="color:#34d399">Closed</span><span class="tt-value">'+fmtNum(clVal)+'</span></div>'
+    +'<div class="tt-row"><span class="tt-label">Net</span><span class="tt-value" style="color:'+(net>0?'var(--accent-red)':'var(--accent-green)')+'">'+( net>0?'+':'')+fmtNum(net)+'</span></div>'
+    +deltaHtml;
+}
+
+function ttTtcFrt(tooltip) {
+  if (!tooltip.dataPoints || !tooltip.dataPoints.length) return '';
+  const dp = tooltip.dataPoints;
+  const label = dp[0].label;
+  const d = DATA[trendDataKey()];
+  const idx = dp[0].dataIndex;
+  const cur = d ? d[idx] : null;
+  const prev = d && idx > 0 ? d[idx-1] : null;
+  const tk = ttcKey(), fk = frtKey();
+  let html = '<div class="tt-title">'+label+'</div>';
+  dp.forEach(p => {
+    const isTtc = p.dataset.label === 'TTC';
+    const unit = isTtc ? 'd' : 'h';
+    const color = isTtc ? '#a78bfa' : '#f0997b';
+    html += '<div class="tt-row"><span class="tt-label" style="color:'+color+'">'+p.dataset.label+'</span><span class="tt-value">'+p.parsed.y+unit+'</span></div>';
+    if (cur && prev) {
+      const key = isTtc ? tk : fk;
+      const c = cur[key], pr = prev[key];
+      if (c && pr && pr > 0) { const pct = ((c-pr)/pr*100).toFixed(1); html += '<div class="tt-delta" style="color:'+(pct>0?'var(--accent-red)':'var(--accent-green)')+'">'+(pct>0?'+':'')+pct+'% vs prior</div>'; }
+    }
+  });
+  if (cur) html += '<div style="font-size:10px;color:var(--text-tertiary);margin-top:4px">n = '+fmtNum(cur.closed||cur.created||0)+' tickets</div>';
+  return html;
+}
+
+function ttResTrend(tooltip) {
+  if (!tooltip.dataPoints || !tooltip.dataPoints.length) return '';
+  const dp = tooltip.dataPoints;
+  const label = dp[0].label;
+  let html = '<div class="tt-title">'+label+'</div>';
+  dp.forEach(p => {
+    const isRate = p.dataset.label === 'Resolution Rate %';
+    const val = isRate ? p.parsed.y.toFixed(1)+'%' : fmtNum(p.parsed.y);
+    const color = p.dataset.label === 'Created' ? '#5b8def' : p.dataset.label === 'Closed' ? '#34d399' : '#a78bfa';
+    html += '<div class="tt-row"><span class="tt-label" style="color:'+color+'">'+p.dataset.label+'</span><span class="tt-value">'+val+'</span></div>';
+  });
+  const d = DATA.resTrend;
+  const idx = dp[0].dataIndex;
+  if (d && idx > 0 && d[idx] && d[idx-1] && d[idx-1].rate != null && d[idx].rate != null) {
+    const diff = (d[idx].rate - d[idx-1].rate).toFixed(1);
+    html += '<div class="tt-delta" style="color:'+(diff>=0?'var(--accent-green)':'var(--accent-red)')+'">'+( diff>=0?'+':'')+diff+' pp vs prior</div>';
+  }
+  return html;
+}
+
+function ttPipeVol(tooltip) {
+  if (!tooltip.dataPoints || !tooltip.dataPoints.length) return '';
+  const dp = tooltip.dataPoints;
+  const label = dp[0].label;
+  let html = '<div class="tt-title">'+label+'</div>';
+  dp.forEach(p => {
+    const color = p.dataset.label === 'Created' ? '#5b8def' : p.dataset.label === 'Closed' ? '#34d399' : '#f0997b';
+    html += '<div class="tt-row"><span class="tt-label" style="color:'+color+'">'+p.dataset.label+'</span><span class="tt-value">'+fmtNum(p.parsed.y)+'</span></div>';
+  });
+  const created = dp.find(d => d.dataset.label === 'Created');
+  const closed = dp.find(d => d.dataset.label === 'Closed');
+  if (created && closed && created.parsed.y > 0) {
+    const rate = (closed.parsed.y / created.parsed.y * 100).toFixed(1);
+    html += '<div class="tt-row"><span class="tt-label">Resolution</span><span class="tt-value">'+rate+'%</span></div>';
+  }
+  return html;
+}
+
+function ttTouches(tooltip) {
+  if (!tooltip.dataPoints || !tooltip.dataPoints.length) return '';
+  const p = tooltip.dataPoints[0];
+  const d = DATA.touches ? DATA.touches[currentPeriod] : null;
+  const total = d ? d.total : 0;
+  const pct = total > 0 ? (p.parsed.y / total * 100).toFixed(1) : '0';
+  return '<div class="tt-title">'+p.label+'</div>'
+    +'<div class="tt-row"><span class="tt-label">Tickets</span><span class="tt-value">'+fmtNum(p.parsed.y)+'</span></div>'
+    +'<div class="tt-row"><span class="tt-label">% of total</span><span class="tt-value">'+pct+'%</span></div>'
+    +(d && d.avg != null ? '<div style="font-size:10px;color:var(--text-tertiary);margin-top:4px">Overall avg: '+d.avg.toFixed(1)+' touches</div>' : '');
+}
+
+function ttTypeTrend(tooltip) {
+  if (!tooltip.dataPoints || !tooltip.dataPoints.length) return '';
+  const dp = tooltip.dataPoints;
+  const label = dp[0].label;
+  const total = dp.reduce((s,p) => s + (p.parsed.y||0), 0);
+  let html = '<div class="tt-title">'+label+'</div>';
+  dp.forEach(p => {
+    const pct = total > 0 ? (p.parsed.y/total*100).toFixed(0) : 0;
+    html += '<div class="tt-row"><span class="tt-label" style="color:'+p.dataset.borderColor+'">'+p.dataset.label+'</span><span class="tt-value">'+fmtNum(p.parsed.y)+' ('+pct+'%)</span></div>';
+  });
+  html += '<div class="tt-row" style="border-top:1px solid var(--border);padding-top:4px;margin-top:4px"><span class="tt-label">Total</span><span class="tt-value">'+fmtNum(total)+'</span></div>';
+  return html;
+}
+
+function ttDonut(tooltip) {
+  if (!tooltip.dataPoints || !tooltip.dataPoints.length) return '';
+  const p = tooltip.dataPoints[0];
+  const sum = p.dataset.data.reduce((a,b) => a+b, 0);
+  const pct = sum > 0 ? (p.parsed / sum * 100).toFixed(1) : '0';
+  return '<div class="tt-title">'+p.label+'</div>'
+    +'<div class="tt-row"><span class="tt-label">Count</span><span class="tt-value">'+fmtNum(p.parsed)+'</span></div>'
+    +'<div class="tt-row"><span class="tt-label">% of total</span><span class="tt-value">'+pct+'%</span></div>'
+    +'<div class="tt-hint">Click to drill down</div>';
+}
+
+function makeExternalTooltip(builder) {
+  return { enabled:false, external: function(ctx) { enhancedTooltipHandler(ctx, builder); } };
+}
+
+// ============================================================
+// TABLE CONTAINER MANAGEMENT
+// ============================================================
+function ensureTableContainers() {
+  const pairs = [
+    {chart:'vol-chart-wrap', table:'vol-table-wrap'},
+    {chart:'pipefrt-chart-wrap', table:'pipefrt-table-wrap'},
+    {chart:'pipevol-chart-wrap', table:'pipevol-table-wrap'},
+    {chart:'restrend-chart-wrap', table:'restrend-table-wrap'}
+  ];
+  pairs.forEach(p => {
+    if (!document.getElementById(p.table)) {
+      const div = document.createElement('div');
+      div.id = p.table;
+      div.className = 'table-wrap';
+      div.style.display = 'none';
+      const ref = document.getElementById(p.chart);
+      if (ref && ref.parentNode) ref.parentNode.insertBefore(div, ref.nextSibling);
+    }
+  });
+}
+
+function refreshOpenTableViews() {
+  if (volView === 'table') renderVolTable();
+  if (pipeVolView === 'table') renderPipeVolTable();
+  const resTrendTable = document.getElementById('restrend-table-wrap');
+  if (resTrendTable && resTrendTable.style.display !== 'none') {
+    const d = DATA.resTrend; if (d) {
+      let h = '<table><thead><tr><th>Period</th><th>Created</th><th>Closed</th><th>Rate %</th></tr></thead><tbody>';
+      d.forEach(r => { h += '<tr><td>'+r.label+'</td><td>'+fmtNum(r.created)+'</td><td>'+fmtNum(r.closed)+'</td><td>'+(r.rate!=null?r.rate.toFixed(1):'--')+'%</td></tr>'; });
+      resTrendTable.innerHTML = h + '</tbody></table>';
+    }
+  }
+}
+
+// ============================================================
+// SIDE-PANEL DRILL-DOWN SYSTEM
+// ============================================================
+function openSidePanel(sectionEl, mainContent, detailContent) {
+  // Add breakout class
+  sectionEl.classList.add('has-sidepanel');
+  // Find or create layout container
+  let layout = sectionEl.querySelector('.sidepanel-layout');
+  if (!layout) {
+    // Wrap existing content into main pane
+    const existingContent = sectionEl.querySelector('.sp-original');
+    if (!existingContent) {
+      // First time: wrap all content after section-head into sp-original
+      const head = sectionEl.querySelector('.section-head');
+      const wrapper = document.createElement('div');
+      wrapper.className = 'sp-original';
+      while (head.nextSibling) wrapper.appendChild(head.nextSibling);
+      sectionEl.appendChild(wrapper);
+    }
+    layout = document.createElement('div');
+    layout.className = 'sidepanel-layout';
+    const mainPane = document.createElement('div');
+    mainPane.className = 'sidepanel-main';
+    const orig = sectionEl.querySelector('.sp-original');
+    mainPane.appendChild(orig);
+    const divider = document.createElement('div');
+    divider.className = 'sidepanel-divider';
+    initDividerDrag(divider, layout);
+    const detailPane = document.createElement('div');
+    detailPane.className = 'sidepanel-detail';
+    detailPane.style.position = 'relative';
+    layout.appendChild(mainPane);
+    layout.appendChild(divider);
+    layout.appendChild(detailPane);
+    sectionEl.appendChild(layout);
+  }
+  const detail = layout.querySelector('.sidepanel-detail');
+  detail.innerHTML = detailContent;
+  detail.scrollTop = 0;
+}
+
+function closeSidePanel(sectionEl) {
+  sectionEl.classList.remove('has-sidepanel');
+  const layout = sectionEl.querySelector('.sidepanel-layout');
+  if (layout) {
+    const mainPane = layout.querySelector('.sidepanel-main');
+    const orig = mainPane ? mainPane.querySelector('.sp-original') : null;
+    if (orig) sectionEl.insertBefore(orig, layout);
+    layout.remove();
+  }
+  // Clear any active highlights
+  sectionEl.querySelectorAll('.sp-filter-item.active').forEach(el => el.classList.remove('active'));
+}
+
+function initDividerDrag(divider, layout) {
+  let startX, startMainWidth;
+  function onMouseDown(e) {
+    e.preventDefault();
+    startX = e.clientX;
+    const main = layout.querySelector('.sidepanel-main');
+    startMainWidth = main.getBoundingClientRect().width;
+    divider.classList.add('dragging');
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }
+  function onMouseMove(e) {
+    const dx = e.clientX - startX;
+    const main = layout.querySelector('.sidepanel-main');
+    const totalW = layout.getBoundingClientRect().width;
+    const newW = Math.max(200, Math.min(totalW - 250, startMainWidth + dx));
+    const pct = (newW / totalW * 100).toFixed(1);
+    layout.style.setProperty('--main-width', pct + '%');
+  }
+  function onMouseUp() {
+    divider.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+  divider.addEventListener('mousedown', onMouseDown);
+}
+
+function spBreadcrumb(crumbs) {
+  // crumbs = [{label, onclick?}, ...]
+  return '<div class="sp-breadcrumb">' + crumbs.map((c, i) => {
+    const sep = i < crumbs.length - 1 ? '<span class="sp-sep">&rsaquo;</span>' : '';
+    if (c.onclick) return '<span class="sp-crumb" onclick="'+c.onclick+'">'+c.label+'</span>' + sep;
+    return '<span>'+c.label+'</span>' + sep;
+  }).join('') + '</div>';
+}
+
+function filterTicketList(tickets, filters) {
+  if (!tickets) return [];
+  return tickets.filter(t => {
+    if (filters.owner && t.owner !== filters.owner) return false;
+    if (filters.type && t.type !== filters.type) return false;
+    if (filters.product && t.product !== filters.product) return false;
+    if (filters.pipeline && t.pipeline !== filters.pipeline) return false;
+    return true;
+  });
+}
+
+// ============================================================
+// HELPERS: buildFilters
+// ============================================================
+function buildFilters(tickets, field) {
+  const counts = {};
+  (tickets || []).forEach(t => { const v = t[field] || 'Unknown'; counts[v] = (counts[v]||0) + 1; });
+  return Object.entries(counts).sort((a,b) => b[1] - a[1]);
+}
+
+// ============================================================
+// DRILLDOWN (legacy)
+// ============================================================
+function openDrilldown(panelId, title, tickets) {
+  const panel = document.getElementById(panelId);
+  if (!panel) return;
+  panel.innerHTML = '<div class="drilldown-header"><h3>' + title + '</h3><button class="drilldown-close" onclick="closeDrilldown(\'' + panelId + '\')">&times;</button></div>' + ticketTable(tickets);
+  panel.classList.add('open');
+  panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+function closeDrilldown(panelId) {
+  const panel = document.getElementById(panelId);
+  if (panel) { panel.classList.remove('open'); panel.innerHTML = ''; }
+}
+function closeAllDrilldowns() {
+  document.querySelectorAll('.drilldown-panel').forEach(p => { p.classList.remove('open'); p.innerHTML = ''; });
+  // Close all side panels
+  closeRepDrill();
+  closePipeFrtDrill();
+  closeAgingDrill();
+  closeSlaDrill();
+  closeOneTouchDrill();
+  closeWorkloadDrill();
+  closeDonutDrill();
+  closeStageDrill();
+}
+let _donutDrill = { label: null, tickets: null, ownerFilter: null, pipelineFilter: null };
+
+function addDrilldownToDonut(chartObj, dataArray) {
+  if (!chartObj) return;
+  chartObj.options.onClick = function(e, elements) {
+    if (!elements.length) return;
+    const idx = elements[0].index;
+    const item = dataArray[idx];
+    if (item && item.tickets && item.tickets.length) {
+      const label = item.type || item.product || item.label || 'Tickets';
+      if (_donutDrill.label === label) { closeDonutDrill(); return; }
+      _donutDrill = { label: label, tickets: item.tickets, ownerFilter: null, pipelineFilter: null };
+      renderDonutDetail();
+    }
+  };
+  chartObj.update();
+}
+
+function closeDonutDrill() {
+  _donutDrill = { label: null, tickets: null, ownerFilter: null, pipelineFilter: null };
+  closeSidePanel(document.getElementById('tickettype-section'));
+}
+
+function donutFilterOwner(name) {
+  _donutDrill.ownerFilter = _donutDrill.ownerFilter === name ? null : name;
+  renderDonutDetail();
+}
+function donutFilterPipeline(pipe) {
+  _donutDrill.pipelineFilter = _donutDrill.pipelineFilter === pipe ? null : pipe;
+  renderDonutDetail();
+}
+
+function renderDonutDetail() {
+  const section = document.getElementById('tickettype-section');
+  const tickets = _donutDrill.tickets || [];
+  const of = _donutDrill.ownerFilter, plf = _donutDrill.pipelineFilter;
+
+  let html = '<button class="sp-close" onclick="closeDonutDrill()">&times;</button>';
+  const crumbs = [{label: _donutDrill.label}];
+  if (of) crumbs.push({label: of});
+  if (plf) crumbs.push({label: plf});
+  html += spBreadcrumb(crumbs);
+
+  // Owner filter
+  const owners = buildFilters(tickets, 'owner');
+  if (owners.length) {
+    html += '<div class="sp-section-label">Filter by owner</div><div class="sp-filter-list">';
+    owners.forEach(([name, count]) => {
+      const active = of === name ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="donutFilterOwner(\''+name.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+name+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Pipeline filter
+  const pipelines = buildFilters(tickets, 'pipeline');
+  if (pipelines.length) {
+    html += '<div class="sp-section-label">Filter by pipeline</div><div class="sp-filter-list">';
+    pipelines.forEach(([pipe, count]) => {
+      const active = plf === pipe ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="donutFilterPipeline(\''+pipe.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+pipe+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Filtered ticket list
+  const filtered = filterTicketList(tickets, { owner: of, pipeline: plf });
+  const filterDesc = [of, plf].filter(Boolean).join(' + ') || 'all';
+  html += '<div class="sp-section-label">Tickets — ' + filtered.length + ' (' + filterDesc + ')</div>';
+  html += '<div class="table-wrap">' + ticketTable(filtered) + '</div>';
+
+  openSidePanel(section, null, html);
+}
+
+// ============================================================
+// CONTROLS
+// ============================================================
+function setPeriod(p) {
+  currentPeriod = p;
+  document.querySelectorAll('[data-period]').forEach(b => b.classList.toggle('active', b.dataset.period === p));
+  closeAllDrilldowns();
+  renderAll();
+}
+function setMetric(m) {
+  currentMetric = m;
+  document.querySelectorAll('[data-metric]').forEach(b => b.classList.toggle('active', b.dataset.metric === m));
+  closeAllDrilldowns();
+  renderAll();
+}
+function setVolView(view, btn) {
+  volView = view;
+  btn.parentElement.querySelectorAll('.control-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('vol-chart-wrap').style.display = view === 'chart' ? 'block' : 'none';
+  document.getElementById('vol-legend').style.display = view === 'chart' ? 'flex' : 'none';
+  document.getElementById('vol-table-wrap').style.display = view === 'table' ? 'block' : 'none';
+  if (view === 'table') renderVolTable();
+}
+function setPipeFrtView(view, btn) {
+  pipeFrtView = view;
+  btn.parentElement.querySelectorAll('.control-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('pipefrt-table-wrap').style.display = view === 'table' ? 'block' : 'none';
+  document.getElementById('pipefrt-chart-wrap').style.display = view === 'chart' ? 'block' : 'none';
+  renderPipeFrt();
+}
+function setResTrendView(view, btn) {
+  btn.parentElement.querySelectorAll('.control-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('restrend-chart-wrap').style.display = view === 'chart' ? 'block' : 'none';
+  document.getElementById('restrend-legend').style.display = view === 'chart' ? 'flex' : 'none';
+  document.getElementById('restrend-table-wrap').style.display = view === 'table' ? 'block' : 'none';
+  if (view === 'table') {
+    const d = DATA.resTrend; if (!d) return;
+    let h = '<table><thead><tr><th>Period</th><th>Created</th><th>Closed</th><th>Rate %</th></tr></thead><tbody>';
+    d.forEach(r => { h += '<tr><td>'+r.label+'</td><td>'+fmtNum(r.created)+'</td><td>'+fmtNum(r.closed)+'</td><td>'+(r.rate!=null?r.rate.toFixed(1):'--')+'%</td></tr>'; });
+    document.getElementById('restrend-table-wrap').innerHTML = h + '</tbody></table>';
+  }
+}
+function setPipeVolView(view, btn) {
+  pipeVolView = view;
+  btn.parentElement.querySelectorAll('.control-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('pipevol-chart-wrap').style.display = view === 'chart' ? 'block' : 'none';
+  document.getElementById('pipevol-table-wrap').style.display = view === 'table' ? 'block' : 'none';
+  if (view === 'table') renderPipeVolTable();
+}
+function renderPipeVolTable() {
+  const vol = DATA.pipeVol ? DATA.pipeVol[currentPeriod] : null;
+  if (!vol) return;
+  let h = '<table><thead><tr><th>Pipeline</th><th>Created</th><th>Closed</th><th>Open</th></tr></thead><tbody>';
+  vol.forEach(r => { h += '<tr><td>' + r.pipeline + '</td><td>' + fmtNum(r.created) + '</td><td>' + fmtNum(r.closed) + '</td><td>' + fmtNum(r.open) + '</td></tr>'; });
+  document.getElementById('pipevol-table-wrap').innerHTML = h + '</tbody></table>';
+}
+function exportHtml() {
+  const blob = new Blob([document.documentElement.outerHTML], {type:'text/html'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'support-dashboard.html'; a.click();
+}
+function exportPdf() { window.print(); }
+
+// ============================================================
+// CHART OPTIONS HELPER
+// ============================================================
+function chartOpts(extra) {
+  const base = { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, interaction:{mode:'index',intersect:false} };
+  return Object.assign(base, extra);
+}
+function xAxis(opts) { return Object.assign({ grid:{display:false}, ticks:{color:TICK_COLOR, font:{size:11}, autoSkip:false, maxRotation:45} }, opts); }
+function yAxis(opts) { return Object.assign({ grid:{color:GRID_COLOR}, ticks:{color:TICK_COLOR, font:{size:11}}, beginAtZero:true }, opts); }
+
+// ============================================================
+// RENDER: KPI
+// ============================================================
+function renderKPI() {
+  const d = DATA.kpi ? DATA.kpi[currentPeriod] : null;
+  const p = DATA.kpi ? DATA.kpi[prevPeriodKey()] : null;
+  if (!d) { document.getElementById('kpi-grid').innerHTML = ''; return; }
+
+  const reopenData = DATA.reopen ? DATA.reopen[currentPeriod] : null;
+  const reopenRate = reopenData && reopenData.total_closed ? ((reopenData.reopened / reopenData.total_closed) * 100).toFixed(1) : '--';
+  const agingOld = DATA.aging ? (DATA.aging.find(a => a.bucket === '90+d') || {}).n || 0 : 0;
+  const openTotal = DATA.openTotal || 0;
+
+  document.getElementById('kpi-grid').innerHTML = `
+    <div class="metric-card">
+      <div class="metric-label">${metricLabel()} time to close</div>
+      <div class="metric-value">${msToDays(d[ttcKey()])} <span style="font-size:13px;font-weight:400;color:var(--text-secondary)">days</span></div>
+      <div class="metric-sub">n = ${fmtNum(d.closed || 0)} tickets</div>
+      ${deltaHtml(d[ttcKey()], p ? p[ttcKey()] : null, true)}
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">${metricLabel()} first response</div>
+      <div class="metric-value">${msToHrs(d[frtKey()])} <span style="font-size:13px;font-weight:400;color:var(--text-secondary)">hrs</span></div>
+      <div class="metric-sub">n = ${fmtNum(d.created || 0)} tickets</div>
+      ${deltaHtml(d[frtKey()], p ? p[frtKey()] : null, true)}
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Open backlog</div>
+      <div class="metric-value">${fmtNum(openTotal)}</div>
+      <div class="metric-sub">${fmtNum(agingOld)} older than 90 days</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Reopen rate</div>
+      <div class="metric-value">${reopenRate}%</div>
+      <div class="metric-sub">${reopenData ? fmtNum(reopenData.reopened) + ' of ' + fmtNum(reopenData.total_closed) + ' closed' : ''}</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Created</div>
+      <div class="metric-value">${fmtNum(d.created)}</div>
+      ${deltaHtml(d.created, p ? p.created : null, false)}
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Closed</div>
+      <div class="metric-value">${fmtNum(d.closed)}</div>
+      ${deltaHtml(d.closed, p ? p.closed : null, false)}
+    </div>
+  `;
+}
+
+// ============================================================
+// RENDER: VOLUME CHART
+// ============================================================
+function renderVolChart() {
+  const d = DATA[trendDataKey()];
+  if (!d || !d.length) return;
+  if (volChart) volChart.destroy();
+  volChart = new Chart(document.getElementById('volChart'), {
+    type: 'bar',
+    data: {
+      labels: d.map(x => x.label),
+      datasets: [
+        { label:'Created', data:d.map(x => x.created), backgroundColor:'#5b8def', borderRadius:3, barPercentage:0.7 },
+        { label:'Closed', data:d.map(x => x.closed), backgroundColor:'#34d399', borderRadius:3, barPercentage:0.7 }
+      ]
+    },
+    options: chartOpts({ plugins:{legend:{display:false},tooltip:makeExternalTooltip(ttVolume)}, scales:{ x:xAxis(), y:yAxis() } })
+  });
+}
+function renderVolTable() {
+  const d = DATA[trendDataKey()];
+  if (!d) return;
+  let h = '<table><thead><tr><th>Period</th><th>Created</th><th>Closed</th></tr></thead><tbody>';
+  d.forEach(r => { h += '<tr><td>' + r.label + '</td><td>' + fmtNum(r.created) + '</td><td>' + fmtNum(r.closed) + '</td></tr>'; });
+  document.getElementById('vol-table-wrap').innerHTML = h + '</tbody></table>';
+}
+
+// ============================================================
+// RENDER: TTC & FRT CHART
+// ============================================================
+function renderTtcChart() {
+  const d = DATA[trendDataKey()];
+  if (!d || !d.length) return;
+  const tk = ttcKey(), fk = frtKey(), ml = metricLabel();
+  document.getElementById('ttc-frt-label').textContent = ml + ' TTC & FRT trend';
+  document.getElementById('ttc-legend-label').textContent = ml + ' TTC (days)';
+  document.getElementById('frt-legend-label').textContent = ml + ' FRT (hours)';
+
+  if (ttcChart) ttcChart.destroy();
+  ttcChart = new Chart(document.getElementById('ttcChart'), {
+    type: 'line',
+    data: {
+      labels: d.map(x => x.label),
+      datasets: [
+        { label:'TTC', data:d.map(x => x[tk] ? +(x[tk]/86400000).toFixed(2) : null), borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.1)', fill:true, tension:0.3, pointRadius:3, yAxisID:'y', spanGaps:true },
+        { label:'FRT', data:d.map(x => x[fk] ? +(x[fk]/3600000).toFixed(2) : null), borderColor:'#f0997b', backgroundColor:'rgba(240,153,123,0.1)', fill:true, tension:0.3, pointRadius:3, yAxisID:'y1', spanGaps:true }
+      ]
+    },
+    options: chartOpts({
+      plugins:{legend:{display:false},tooltip:makeExternalTooltip(ttTtcFrt)},
+      scales: {
+        x: xAxis(),
+        y: { position:'left', grid:{color:GRID_COLOR}, ticks:{color:'#a78bfa', font:{size:11}, callback:v=>v+'d'}, title:{display:true, text:'TTC (days)', color:'#a78bfa', font:{size:11}} },
+        y1: { position:'right', grid:{display:false}, ticks:{color:'#f0997b', font:{size:11}, callback:v=>v+'h'}, title:{display:true, text:'FRT (hours)', color:'#f0997b', font:{size:11}} }
+      }
+    })
+  });
+}
+
+// ============================================================
+// RENDER: REP PERFORMANCE
+// ============================================================
+function renderRepTable() {
+  const d = DATA.rep ? DATA.rep[currentPeriod] : null;
+  if (!d) { document.getElementById('rep-body').innerHTML = ''; return; }
+  const tk = ttcKey(), fk = frtKey(), ml = metricLabel();
+  document.getElementById('rep-ttc-header').textContent = ml + ' TTC';
+  document.getElementById('rep-frt-header').textContent = ml + ' FRT';
+  document.getElementById('rep-body').innerHTML = d.map((r, i) => `
+    <tr onclick="drilldownRep(${i})" style="cursor:pointer">
+      <td style="font-weight:500">${r.name}</td>
+      <td>${msToDays(r[tk])} days</td>
+      <td>${msToHrs(r[fk])} hrs</td>
+      <td>${fmtNum(r.closed)}</td>
+    </tr>
+  `).join('');
+}
+// Rep drill-down state
+let _repDrill = { idx: null, typeFilter: null, productFilter: null };
+
+function drilldownRep(idx) {
+  const d = DATA.rep[currentPeriod];
+  if (!d || !d[idx]) return;
+  // Toggle off if same rep
+  if (_repDrill.idx === idx) { closeRepDrill(); return; }
+  _repDrill = { idx: idx, typeFilter: null, productFilter: null };
+  // Highlight active row
+  document.querySelectorAll('#rep-body tr').forEach((tr, i) => tr.classList.toggle('sp-filter-item', false));
+  document.querySelectorAll('#rep-body tr').forEach((tr, i) => { tr.style.background = i === idx ? 'var(--accent-blue)' : ''; tr.style.color = i === idx ? '#fff' : ''; });
+  renderRepDetail();
+}
+
+function closeRepDrill() {
+  _repDrill = { idx: null, typeFilter: null, productFilter: null };
+  document.querySelectorAll('#rep-body tr').forEach(tr => { tr.style.background = ''; tr.style.color = ''; });
+  closeSidePanel(document.getElementById('rep-section'));
+}
+
+function repFilterType(type) {
+  _repDrill.typeFilter = _repDrill.typeFilter === type ? null : type;
+  renderRepDetail();
+}
+
+function repFilterProduct(prod) {
+  _repDrill.productFilter = _repDrill.productFilter === prod ? null : prod;
+  renderRepDetail();
+}
+
+function renderRepDetail() {
+  const d = DATA.rep[currentPeriod];
+  const r = d[_repDrill.idx];
+  const section = document.getElementById('rep-section');
+  const tf = _repDrill.typeFilter, pf = _repDrill.productFilter;
+
+  let html = '<button class="sp-close" onclick="closeRepDrill()">&times;</button>';
+  // Breadcrumb
+  const crumbs = [{label: r.name}];
+  if (tf) crumbs.push({label: tf});
+  if (pf) crumbs.push({label: pf});
+  html += spBreadcrumb(crumbs);
+
+  // Summary cards
+  html += '<div class="summary-cards" style="grid-template-columns:repeat(3,1fr)">';
+  html += '<div class="metric-card"><div class="metric-label">' + metricLabel() + ' TTC</div><div class="metric-value" style="font-size:18px">' + msToDays(r[ttcKey()]) + 'd</div></div>';
+  html += '<div class="metric-card"><div class="metric-label">' + metricLabel() + ' FRT</div><div class="metric-value" style="font-size:18px">' + msToHrs(r[frtKey()]) + 'h</div></div>';
+  html += '<div class="metric-card"><div class="metric-label">Closed</div><div class="metric-value" style="font-size:18px">' + fmtNum(r.closed) + '</div></div>';
+  html += '</div>';
+
+  // Type filter list
+  if (r.types && r.types.length) {
+    html += '<div class="sp-section-label">Filter by type</div><div class="sp-filter-list">';
+    r.types.forEach(t => {
+      const active = tf === t.type ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="repFilterType(\''+t.type.replace(/'/g,"\\'")+'\')" title="Click to filter tickets to this type"><span>'+t.type+'</span><span class="sp-count">'+fmtNum(t.n)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Product filter list
+  if (r.products && r.products.length) {
+    html += '<div class="sp-section-label">Filter by product</div><div class="sp-filter-list">';
+    r.products.forEach(p => {
+      const active = pf === p.product ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="repFilterProduct(\''+p.product.replace(/'/g,"\\'")+'\')" title="Click to filter tickets to this product"><span>'+p.product+'</span><span class="sp-count">'+fmtNum(p.n)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Filtered ticket list
+  const filtered = filterTicketList(r.tickets, { type: tf, product: pf });
+  const filterDesc = [tf, pf].filter(Boolean).join(' + ') || 'all';
+  html += '<div class="sp-section-label">Tickets — ' + filtered.length + ' (' + filterDesc + ')</div>';
+  html += '<div class="table-wrap">' + ticketTable(filtered) + '</div>';
+
+  openSidePanel(section, null, html);
+}
+
+// ============================================================
+// RENDER: PIPELINE FRT
+// ============================================================
+function renderPipeFrt() {
+  const d = DATA.pipeFrt ? DATA.pipeFrt[currentPeriod] : null;
+  if (!d) { document.getElementById('pipe-body').innerHTML = ''; return; }
+  const fk = frtKey(), ml = metricLabel();
+  document.getElementById('pipe-frt-label').textContent = ml + ' first response time by pipeline';
+  document.getElementById('pipe-frt-header').textContent = ml + ' FRT';
+
+  const maxFrt = Math.max(...d.map(p => p[fk] || 0));
+  document.getElementById('pipe-body').innerHTML = d.map((p, i) => {
+    const v = p[fk] || 0;
+    const w = maxFrt > 0 ? Math.round(v / maxFrt * 100) : 0;
+    const color = w > 60 ? '#f87171' : w > 30 ? '#fbbf24' : '#34d399';
+    return `<tr onclick="drilldownPipeFrt(${i})" style="cursor:pointer">
+      <td style="font-weight:500">${p.pipeline}</td>
+      <td>${fmtNum(p.n)}</td>
+      <td>${msToHrs(v)} hrs</td>
+      <td><div class="bar-bg"><div class="bar-fill" style="width:${w}%;background:${color}"></div></div></td>
+    </tr>`;
+  }).join('');
+
+  // Horizontal bar chart
+  if (pipeFrtBarChartObj) pipeFrtBarChartObj.destroy();
+  const barColors = d.map(r => { const v = r[fk]||0; const pct = maxFrt?v/maxFrt:0; return pct<0.3?'#34d399':pct<0.6?'#fbbf24':'#f87171'; });
+  pipeFrtBarChartObj = new Chart(document.getElementById('pipeFrtBarChart'), {
+    type:'bar',
+    data:{ labels:d.map(r=>r.pipeline), datasets:[{label:ml+' FRT (hrs)', data:d.map(r=>r[fk]?(r[fk]/3600000):0), backgroundColor:barColors}] },
+    options: chartOpts({ indexAxis:'y', scales:{ x:{ticks:{color:TICK_COLOR},grid:{color:GRID_COLOR},title:{display:true,text:'Hours',color:TICK_COLOR}}, y:{ticks:{color:'#9ca0ab'},grid:{color:GRID_COLOR}} } })
+  });
+}
+let _pipeFrtDrill = { idx: null, ownerFilter: null, typeFilter: null, productFilter: null };
+
+function drilldownPipeFrt(idx) {
+  const d = DATA.pipeFrt[currentPeriod];
+  if (!d || !d[idx]) return;
+  if (_pipeFrtDrill.idx === idx) { closePipeFrtDrill(); return; }
+  _pipeFrtDrill = { idx: idx, ownerFilter: null, typeFilter: null, productFilter: null };
+  document.querySelectorAll('#pipe-body tr').forEach((tr, i) => { tr.style.background = i === idx ? 'var(--accent-blue)' : ''; tr.style.color = i === idx ? '#fff' : ''; });
+  renderPipeFrtDetail();
+}
+
+function closePipeFrtDrill() {
+  _pipeFrtDrill = { idx: null, ownerFilter: null, typeFilter: null, productFilter: null };
+  document.querySelectorAll('#pipe-body tr').forEach(tr => { tr.style.background = ''; tr.style.color = ''; });
+  closeSidePanel(document.getElementById('pipefrt-section'));
+}
+
+function pipeFrtFilterOwner(name) {
+  _pipeFrtDrill.ownerFilter = _pipeFrtDrill.ownerFilter === name ? null : name;
+  renderPipeFrtDetail();
+}
+function pipeFrtFilterType(type) {
+  _pipeFrtDrill.typeFilter = _pipeFrtDrill.typeFilter === type ? null : type;
+  renderPipeFrtDetail();
+}
+function pipeFrtFilterProduct(prod) {
+  _pipeFrtDrill.productFilter = _pipeFrtDrill.productFilter === prod ? null : prod;
+  renderPipeFrtDetail();
+}
+
+function renderPipeFrtDetail() {
+  const d = DATA.pipeFrt[currentPeriod];
+  const p = d[_pipeFrtDrill.idx];
+  const section = document.getElementById('pipefrt-section');
+  const of = _pipeFrtDrill.ownerFilter, tf = _pipeFrtDrill.typeFilter, pf = _pipeFrtDrill.productFilter;
+  const tickets = p.tickets || [];
+
+  let html = '<button class="sp-close" onclick="closePipeFrtDrill()">&times;</button>';
+  const crumbs = [{label: p.pipeline}];
+  if (of) crumbs.push({label: of});
+  if (tf) crumbs.push({label: tf});
+  if (pf) crumbs.push({label: pf});
+  html += spBreadcrumb(crumbs);
+
+  // Summary cards
+  html += '<div class="summary-cards" style="grid-template-columns:repeat(2,1fr)">';
+  html += '<div class="metric-card"><div class="metric-label">' + metricLabel() + ' FRT</div><div class="metric-value" style="font-size:18px">' + msToHrs(p[frtKey()]) + 'h</div></div>';
+  html += '<div class="metric-card"><div class="metric-label">Tickets</div><div class="metric-value" style="font-size:18px">' + fmtNum(p.n) + '</div></div>';
+  html += '</div>';
+
+  // Owner filter
+  const owners = buildFilters(tickets, 'owner');
+  if (owners.length) {
+    html += '<div class="sp-section-label">Filter by owner</div><div class="sp-filter-list">';
+    owners.forEach(([name, count]) => {
+      const active = of === name ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="pipeFrtFilterOwner(\''+name.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+name+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Type filter
+  const types = buildFilters(tickets, 'type');
+  if (types.length) {
+    html += '<div class="sp-section-label">Filter by type</div><div class="sp-filter-list">';
+    types.forEach(([type, count]) => {
+      const active = tf === type ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="pipeFrtFilterType(\''+type.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+type+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Product filter
+  const products = buildFilters(tickets, 'product');
+  if (products.length) {
+    html += '<div class="sp-section-label">Filter by product</div><div class="sp-filter-list">';
+    products.forEach(([prod, count]) => {
+      const active = pf === prod ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="pipeFrtFilterProduct(\''+prod.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+prod+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Filtered ticket list
+  const filtered = filterTicketList(tickets, { owner: of, type: tf, product: pf });
+  const filterDesc = [of, tf, pf].filter(Boolean).join(' + ') || 'all';
+  html += '<div class="sp-section-label">Tickets — ' + filtered.length + ' (' + filterDesc + ')</div>';
+  html += '<div class="table-wrap">' + ticketTable(filtered) + '</div>';
+
+  openSidePanel(section, null, html);
+}
+
+// ============================================================
+// RENDER: PIPELINE VOLUME
+// ============================================================
+function renderPipeVol() {
+  const vol = DATA.pipeVol ? DATA.pipeVol[currentPeriod] : null;
+  if (!vol) return;
+  if (pipeVolChart) pipeVolChart.destroy();
+  pipeVolChart = new Chart(document.getElementById('pipeVolChart'), {
+    type: 'bar',
+    data: {
+      labels: vol.map(v => v.pipeline.replace('GitKraken ','GK ')),
+      datasets: [
+        { label:'Created', data:vol.map(v=>v.created), backgroundColor:'#5b8def', borderRadius:3 },
+        { label:'Closed', data:vol.map(v=>v.closed), backgroundColor:'#34d399', borderRadius:3 },
+        { label:'Open', data:vol.map(v=>v.open), backgroundColor:'#f0997b', borderRadius:3 }
+      ]
+    },
+    options: chartOpts({
+      plugins:{legend:{display:true, position:'top', labels:{boxWidth:10, font:{size:11}, color:'#9ca0ab'}}, tooltip:makeExternalTooltip(ttPipeVol)},
+      scales:{ x:xAxis({maxRotation:30}), y:yAxis() }
+    })
+  });
+}
+
+// ============================================================
+// RENDER: STAGE TIME
+// ============================================================
+let _stageDrill = { pipeIdx: null, stageIdx: null, ownerFilter: null, typeFilter: null, productFilter: null };
+
+function renderStageTable() {
+  const d = DATA.stageTime ? DATA.stageTime[currentPeriod] : null;
+  if (!d) { document.getElementById('stage-table-wrap').innerHTML = ''; return; }
+  window._stageData = d;
+  const ml = metricLabel(), sk = stageTimeKey();
+  let h = '<div class="sp-filter-list" id="stage-pipe-list">';
+  d.forEach((pipe, pi) => {
+    const active = _stageDrill.pipeIdx === pi ? ' active' : '';
+    h += '<div class="sp-filter-item'+active+'" onclick="drilldownStagePipe('+pi+')" title="Click to see stages for '+pipe.pipeline.replace(/"/g,'&quot;')+'">';
+    h += '<span>'+pipe.pipeline+'</span>';
+    h += '<span class="sp-count">'+fmtNum(pipe.total_n)+' trans</span>';
+    h += '</div>';
+  });
+  h += '</div>';
+  h += '<div class="hint">Click a pipeline to drill down into stages</div>';
+  document.getElementById('stage-table-wrap').innerHTML = h;
+}
+
+function drilldownStagePipe(pi) {
+  const d = window._stageData;
+  if (!d || !d[pi]) return;
+  if (_stageDrill.pipeIdx === pi && _stageDrill.stageIdx === null) { closeStageDrill(); return; }
+  _stageDrill = { pipeIdx: pi, stageIdx: null, ownerFilter: null, typeFilter: null, productFilter: null };
+  // Highlight active pipeline
+  document.querySelectorAll('#stage-pipe-list .sp-filter-item').forEach((el, i) => {
+    el.classList.toggle('active', i === pi);
+  });
+  renderStageDetail();
+}
+
+function drilldownStageStage(si) {
+  if (_stageDrill.stageIdx === si) {
+    // Toggle back to stage list only
+    _stageDrill.stageIdx = null;
+    _stageDrill.ownerFilter = null;
+    _stageDrill.typeFilter = null;
+    _stageDrill.productFilter = null;
+    renderStageDetail();
+    return;
+  }
+  _stageDrill.stageIdx = si;
+  _stageDrill.ownerFilter = null;
+  _stageDrill.typeFilter = null;
+  _stageDrill.productFilter = null;
+  renderStageDetail();
+}
+
+function closeStageDrill() {
+  _stageDrill = { pipeIdx: null, stageIdx: null, ownerFilter: null, typeFilter: null, productFilter: null };
+  document.querySelectorAll('#stage-pipe-list .sp-filter-item').forEach(el => el.classList.remove('active'));
+  closeSidePanel(document.getElementById('stage-section'));
+}
+
+function stageFilterOwner(name) {
+  _stageDrill.ownerFilter = _stageDrill.ownerFilter === name ? null : name;
+  renderStageDetail();
+}
+function stageFilterType(type) {
+  _stageDrill.typeFilter = _stageDrill.typeFilter === type ? null : type;
+  renderStageDetail();
+}
+function stageFilterProduct(prod) {
+  _stageDrill.productFilter = _stageDrill.productFilter === prod ? null : prod;
+  renderStageDetail();
+}
+
+function renderStageDetail() {
+  const d = window._stageData;
+  const pi = _stageDrill.pipeIdx;
+  if (pi === null || !d || !d[pi]) return;
+  const pipe = d[pi];
+  const section = document.getElementById('stage-section');
+  const ml = metricLabel(), sk = stageTimeKey();
+  const si = _stageDrill.stageIdx;
+
+  let html = '<button class="sp-close" onclick="closeStageDrill()">&times;</button>';
+
+  if (si === null) {
+    // Show stage list for this pipeline
+    const crumbs = [{label: pipe.pipeline}];
+    html += spBreadcrumb(crumbs);
+    html += '<div class="summary-cards" style="grid-template-columns:repeat(2,1fr)">';
+    html += '<div class="metric-card"><div class="metric-label">Total transitions</div><div class="metric-value" style="font-size:18px">'+fmtNum(pipe.total_n)+'</div></div>';
+    html += '<div class="metric-card"><div class="metric-label">Stages</div><div class="metric-value" style="font-size:18px">'+pipe.stages.length+'</div></div>';
+    html += '</div>';
+    html += '<div class="sp-section-label">Stages (click to drill into)</div>';
+    html += '<div class="sp-filter-list">';
+    pipe.stages.forEach((s, idx) => {
+      html += '<div class="sp-filter-item" onclick="drilldownStageStage('+idx+')" title="'+ml+': '+msToHrs(s[sk])+'h">';
+      html += '<span>'+s.stage+'</span>';
+      html += '<span class="sp-count">'+msToHrs(s[sk])+'h &middot; '+fmtNum(s.n)+'</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+  } else {
+    // Show owner breakdown + filters + ticket list for specific stage
+    const stage = pipe.stages[si];
+    const of = _stageDrill.ownerFilter, tf = _stageDrill.typeFilter, pf = _stageDrill.productFilter;
+    const crumbs = [
+      {label: pipe.pipeline, onclick: "_stageDrill.stageIdx=null;_stageDrill.ownerFilter=null;_stageDrill.typeFilter=null;_stageDrill.productFilter=null;renderStageDetail();"},
+      {label: stage.stage}
+    ];
+    if (of) crumbs.push({label: of});
+    if (tf) crumbs.push({label: tf});
+    if (pf) crumbs.push({label: pf});
+    html += spBreadcrumb(crumbs);
+
+    // Summary cards
+    html += '<div class="summary-cards" style="grid-template-columns:repeat(3,1fr)">';
+    html += '<div class="metric-card"><div class="metric-label">'+ml+' Time</div><div class="metric-value" style="font-size:18px">'+msToHrs(stage[sk])+'h</div></div>';
+    html += '<div class="metric-card"><div class="metric-label">Transitions</div><div class="metric-value" style="font-size:18px">'+fmtNum(stage.n)+'</div></div>';
+    const uniqueTickets = stage.tickets ? stage.tickets.length : 0;
+    html += '<div class="metric-card"><div class="metric-label">Unique tickets</div><div class="metric-value" style="font-size:18px">'+fmtNum(uniqueTickets)+'</div></div>';
+    html += '</div>';
+
+    // Owner filter list
+    if (stage.by_owner && stage.by_owner.length) {
+      html += '<div class="sp-section-label">Filter by owner <span style="text-transform:none;font-style:italic;letter-spacing:0">(by transitions)</span></div>';
+      html += '<div class="sp-filter-list">';
+      stage.by_owner.forEach(o => {
+        const active = of === o.name ? ' active' : '';
+        html += '<div class="sp-filter-item'+active+'" onclick="stageFilterOwner(\''+o.name.replace(/'/g,"\\'")+'\')" title="'+ml+': '+msToHrs(o[sk])+'h, '+fmtNum(o.n)+' transitions">';
+        html += '<span>'+o.name+'</span>';
+        html += '<span class="sp-count">'+fmtNum(o.n)+' trans &middot; '+msToHrs(o[sk])+'h</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    // Type filter
+    const tickets = stage.tickets || [];
+    const typeFilters = buildFilters(tickets, 'type');
+    if (typeFilters.length > 1) {
+      html += '<div class="sp-section-label">Filter by type</div><div class="sp-filter-list">';
+      typeFilters.forEach(([val, cnt]) => {
+        const active = tf === val ? ' active' : '';
+        html += '<div class="sp-filter-item'+active+'" onclick="stageFilterType(\''+val.replace(/'/g,"\\'")+'\')">';
+        html += '<span>'+val+'</span><span class="sp-count">'+fmtNum(cnt)+'</span></div>';
+      });
+      html += '</div>';
+    }
+
+    // Product filter
+    const prodFilters = buildFilters(tickets, 'product');
+    if (prodFilters.length > 1) {
+      html += '<div class="sp-section-label">Filter by product</div><div class="sp-filter-list">';
+      prodFilters.forEach(([val, cnt]) => {
+        const active = pf === val ? ' active' : '';
+        html += '<div class="sp-filter-item'+active+'" onclick="stageFilterProduct(\''+val.replace(/'/g,"\\'")+'\')">';
+        html += '<span>'+val+'</span><span class="sp-count">'+fmtNum(cnt)+'</span></div>';
+      });
+      html += '</div>';
+    }
+
+    // Filtered ticket list
+    const filtered = filterTicketList(tickets, { owner: of, type: tf, product: pf });
+    const filterDesc = [of, tf, pf].filter(Boolean).join(' + ') || 'all';
+    html += '<div class="sp-section-label">Tickets — '+filtered.length+' ('+filterDesc+')</div>';
+    html += '<div class="table-wrap">'+ticketTable(filtered)+'</div>';
+  }
+
+  openSidePanel(section, null, html);
+}
+
+// ============================================================
+// RENDER: AGING
+// ============================================================
+function renderAging() {
+  const d = DATA.aging;
+  if (!d || !d.length) return;
+  const colors = { '0-7d':'#34d399', '7-30d':'#5b8def', '30-90d':'#fbbf24', '90+d':'#f87171' };
+  const max = Math.max(...d.map(a => a.n));
+  let html = '<div class="aging-grid">';
+  html += '<div style="color:var(--text-tertiary);font-size:11px;text-transform:uppercase;letter-spacing:0.3px">Bucket</div><div style="color:var(--text-tertiary);font-size:11px;text-transform:uppercase;letter-spacing:0.3px">Count</div><div></div>';
+  d.forEach(a => {
+    const w = Math.round(a.n / max * 100);
+    const clickable = a.tickets && a.tickets.length ? ' style="cursor:pointer;font-weight:500" onclick="drilldownAging(\'' + a.bucket.replace(/'/g,"\\'") + '\')"' : ' style="font-weight:500"';
+    html += '<div>' + a.bucket + '</div><div' + clickable + '>' + fmtNum(a.n) + '</div>';
+    html += '<div><div class="bar-bg"><div class="bar-fill" style="width:' + w + '%;background:' + colors[a.bucket] + '"></div></div></div>';
+  });
+  html += '</div>';
+  const old = d.find(a => a.bucket === '90+d');
+  html += '<div style="font-size:11px;color:var(--text-tertiary);margin-top:10px">' + (old ? old.n : 0) + ' of ' + (DATA.openTotal||0) + ' open tickets (' + (DATA.openTotal ? Math.round((old?old.n:0)/DATA.openTotal*100) : 0) + '%) are older than 90 days</div>';
+  document.getElementById('aging-section').innerHTML = html;
+}
+let _agingDrill = { bucket: null, ownerFilter: null, typeFilter: null, productFilter: null, pipelineFilter: null };
+
+function drilldownAging(bucket) {
+  if (_agingDrill.bucket === bucket) { closeAgingDrill(); return; }
+  const item = DATA.aging.find(r => r.bucket === bucket);
+  if (!item || !item.tickets || !item.tickets.length) return;
+  _agingDrill = { bucket: bucket, ownerFilter: null, typeFilter: null, productFilter: null, pipelineFilter: null };
+  renderAgingDetail();
+}
+
+function closeAgingDrill() {
+  _agingDrill = { bucket: null, ownerFilter: null, typeFilter: null, productFilter: null, pipelineFilter: null };
+  closeSidePanel(document.getElementById('aging-sec'));
+}
+
+function agingFilterOwner(name) {
+  _agingDrill.ownerFilter = _agingDrill.ownerFilter === name ? null : name;
+  renderAgingDetail();
+}
+function agingFilterType(type) {
+  _agingDrill.typeFilter = _agingDrill.typeFilter === type ? null : type;
+  renderAgingDetail();
+}
+function agingFilterProduct(prod) {
+  _agingDrill.productFilter = _agingDrill.productFilter === prod ? null : prod;
+  renderAgingDetail();
+}
+function agingFilterPipeline(pipe) {
+  _agingDrill.pipelineFilter = _agingDrill.pipelineFilter === pipe ? null : pipe;
+  renderAgingDetail();
+}
+
+function renderAgingDetail() {
+  const item = DATA.aging.find(r => r.bucket === _agingDrill.bucket);
+  if (!item) return;
+  const section = document.getElementById('aging-sec');
+  const of = _agingDrill.ownerFilter, tf = _agingDrill.typeFilter, pf = _agingDrill.productFilter, plf = _agingDrill.pipelineFilter;
+  const tickets = item.tickets || [];
+
+  let html = '<button class="sp-close" onclick="closeAgingDrill()">&times;</button>';
+  const crumbs = [{label: 'Aging: ' + _agingDrill.bucket}];
+  if (of) crumbs.push({label: of});
+  if (tf) crumbs.push({label: tf});
+  if (pf) crumbs.push({label: pf});
+  if (plf) crumbs.push({label: plf});
+  html += spBreadcrumb(crumbs);
+
+  // Owner filter
+  const owners = buildFilters(tickets, 'owner');
+  if (owners.length) {
+    html += '<div class="sp-section-label">Filter by owner</div><div class="sp-filter-list">';
+    owners.forEach(([name, count]) => {
+      const active = of === name ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="agingFilterOwner(\''+name.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+name+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Type filter
+  const types = buildFilters(tickets, 'type');
+  if (types.length) {
+    html += '<div class="sp-section-label">Filter by type</div><div class="sp-filter-list">';
+    types.forEach(([type, count]) => {
+      const active = tf === type ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="agingFilterType(\''+type.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+type+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Product filter
+  const products = buildFilters(tickets, 'product');
+  if (products.length) {
+    html += '<div class="sp-section-label">Filter by product</div><div class="sp-filter-list">';
+    products.forEach(([prod, count]) => {
+      const active = pf === prod ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="agingFilterProduct(\''+prod.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+prod+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Pipeline filter
+  const pipelines = buildFilters(tickets, 'pipeline');
+  if (pipelines.length) {
+    html += '<div class="sp-section-label">Filter by pipeline</div><div class="sp-filter-list">';
+    pipelines.forEach(([pipe, count]) => {
+      const active = plf === pipe ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="agingFilterPipeline(\''+pipe.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+pipe+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Filtered ticket list
+  const filtered = filterTicketList(tickets, { owner: of, type: tf, product: pf, pipeline: plf });
+  const filterDesc = [of, tf, pf, plf].filter(Boolean).join(' + ') || 'all';
+  html += '<div class="sp-section-label">Tickets — ' + filtered.length + ' (' + filterDesc + ')</div>';
+  html += '<div class="table-wrap">' + ticketTable(filtered) + '</div>';
+
+  openSidePanel(section, null, html);
+}
+
+// ============================================================
+// RENDER: SLA
+// ============================================================
+function renderSla() {
+  const d = DATA.sla ? DATA.sla[currentPeriod] : null;
+  if (!d) { document.getElementById('sla-overall').innerHTML = ''; document.getElementById('sla-table-wrap').innerHTML = ''; return; }
+  const o = d.overall || {};
+  let cards = '';
+  cards += '<div class="metric-card"><div class="metric-label">Met rate</div><div class="metric-value" style="color:var(--accent-green)">' + (o.rate != null ? o.rate.toFixed(1) + '%' : '--') + '</div></div>';
+  cards += '<div class="metric-card"><div class="metric-label">Met</div><div class="metric-value">' + fmtNum(o.met) + '</div></div>';
+  const bClick = o.breached_tickets && o.breached_tickets.length ? ' style="cursor:pointer" onclick="drilldownSlaBreach(\'overall\')"' : '';
+  cards += '<div class="metric-card"' + bClick + '><div class="metric-label">Breached</div><div class="metric-value" style="color:var(--accent-red)">' + fmtNum(o.breached) + '</div></div>';
+  document.getElementById('sla-overall').innerHTML = cards;
+
+  if (d.by_pipeline && d.by_pipeline.length) {
+    let h = '<table><thead><tr><th>Pipeline</th><th>Target (hrs)</th><th>Met</th><th>Breached</th><th>Rate</th><th>Median Biz Hrs</th></tr></thead><tbody>';
+    d.by_pipeline.forEach((r, i) => {
+      const bc = r.breached_tickets && r.breached_tickets.length ? 'onclick="drilldownSlaBreach(\'pipe-'+i+'\')" style="cursor:pointer;color:var(--accent-red)"' : '';
+      h += '<tr><td>' + r.pipeline + '</td><td>' + fmtNum(r.target_hrs) + '</td><td>' + fmtNum(r.met) + '</td><td><a href="javascript:void(0)" ' + bc + '>' + fmtNum(r.breached) + '</a></td><td>' + (r.rate != null ? r.rate.toFixed(1)+'%' : '--') + '</td><td>' + (r.median_biz_hrs != null ? r.median_biz_hrs.toFixed(1) : '--') + '</td></tr>';
+    });
+    document.getElementById('sla-table-wrap').innerHTML = h + '</tbody></table>';
+  }
+}
+let _slaDrill = { key: null, ownerFilter: null, typeFilter: null, productFilter: null };
+
+function drilldownSlaBreach(key) {
+  if (_slaDrill.key === key) { closeSlaDrill(); return; }
+  _slaDrill = { key: key, ownerFilter: null, typeFilter: null, productFilter: null };
+  renderSlaDetail();
+}
+
+function closeSlaDrill() {
+  _slaDrill = { key: null, ownerFilter: null, typeFilter: null, productFilter: null };
+  closeSidePanel(document.getElementById('sla-section'));
+}
+
+function slaFilterOwner(name) {
+  _slaDrill.ownerFilter = _slaDrill.ownerFilter === name ? null : name;
+  renderSlaDetail();
+}
+function slaFilterType(type) {
+  _slaDrill.typeFilter = _slaDrill.typeFilter === type ? null : type;
+  renderSlaDetail();
+}
+function slaFilterProduct(prod) {
+  _slaDrill.productFilter = _slaDrill.productFilter === prod ? null : prod;
+  renderSlaDetail();
+}
+
+function renderSlaDetail() {
+  const d = DATA.sla ? DATA.sla[currentPeriod] : null;
+  if (!d) return;
+  const key = _slaDrill.key;
+  let tickets = [], title = 'SLA Breached Tickets';
+  if (key === 'overall') { tickets = d.overall.breached_tickets || []; title = 'All SLA Breached Tickets'; }
+  else { const idx = parseInt(key.replace('pipe-','')); if (d.by_pipeline && d.by_pipeline[idx]) { tickets = d.by_pipeline[idx].breached_tickets || []; title = d.by_pipeline[idx].pipeline + ' - Breached'; } }
+
+  const section = document.getElementById('sla-section');
+  const of = _slaDrill.ownerFilter, tf = _slaDrill.typeFilter, pf = _slaDrill.productFilter;
+
+  let html = '<button class="sp-close" onclick="closeSlaDrill()">&times;</button>';
+  const crumbs = [{label: title}];
+  if (of) crumbs.push({label: of});
+  if (tf) crumbs.push({label: tf});
+  if (pf) crumbs.push({label: pf});
+  html += spBreadcrumb(crumbs);
+
+  // Owner filter
+  const owners = buildFilters(tickets, 'owner');
+  if (owners.length) {
+    html += '<div class="sp-section-label">Filter by owner</div><div class="sp-filter-list">';
+    owners.forEach(([name, count]) => {
+      const active = of === name ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="slaFilterOwner(\''+name.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+name+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Type filter
+  const types = buildFilters(tickets, 'type');
+  if (types.length) {
+    html += '<div class="sp-section-label">Filter by type</div><div class="sp-filter-list">';
+    types.forEach(([type, count]) => {
+      const active = tf === type ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="slaFilterType(\''+type.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+type+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Product filter
+  const products = buildFilters(tickets, 'product');
+  if (products.length) {
+    html += '<div class="sp-section-label">Filter by product</div><div class="sp-filter-list">';
+    products.forEach(([prod, count]) => {
+      const active = pf === prod ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="slaFilterProduct(\''+prod.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+prod+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Filtered ticket list
+  const filtered = filterTicketList(tickets, { owner: of, type: tf, product: pf });
+  const filterDesc = [of, tf, pf].filter(Boolean).join(' + ') || 'all';
+  html += '<div class="sp-section-label">Tickets — ' + filtered.length + ' (' + filterDesc + ')</div>';
+  html += '<div class="table-wrap">' + ticketTable(filtered) + '</div>';
+
+  openSidePanel(section, null, html);
+}
+
+// ============================================================
+// RENDER: ONE-TOUCH
+// ============================================================
+function renderOneTouch() {
+  const d = DATA.oneTouch ? DATA.oneTouch[currentPeriod] : null;
+  if (!d) { document.getElementById('onetouch-summary').innerHTML = ''; document.getElementById('onetouch-table-wrap').innerHTML = ''; return; }
+  let cards = '';
+  cards += '<div class="metric-card"><div class="metric-label">Total closed</div><div class="metric-value">' + fmtNum(d.total_closed) + '</div></div>';
+  cards += '<div class="metric-card"><div class="metric-label">One-touch</div><div class="metric-value">' + fmtNum(d.one_touch) + '</div></div>';
+  cards += '<div class="metric-card"><div class="metric-label">Rate</div><div class="metric-value" style="color:var(--accent-green)">' + (d.rate != null ? d.rate.toFixed(1)+'%' : '--') + '</div></div>';
+  document.getElementById('onetouch-summary').innerHTML = cards;
+
+  if (d.by_agent && d.by_agent.length) {
+    let h = '<table><thead><tr><th>Name</th><th>Closed</th><th>One-touch</th><th>Rate</th></tr></thead><tbody>';
+    d.by_agent.forEach((r, i) => {
+      h += '<tr onclick="drilldownOneTouch('+i+')" style="cursor:pointer"><td>' + r.name + '</td><td>' + fmtNum(r.closed) + '</td><td>' + fmtNum(r.one_touch) + '</td><td>' + (r.rate!=null?r.rate.toFixed(1)+'%':'--') + '</td></tr>';
+    });
+    document.getElementById('onetouch-table-wrap').innerHTML = h + '</tbody></table>';
+  }
+}
+let _oneTouchDrill = { idx: null, typeFilter: null, productFilter: null };
+
+function drilldownOneTouch(idx) {
+  const d = DATA.oneTouch ? DATA.oneTouch[currentPeriod] : null;
+  if (!d || !d.by_agent || !d.by_agent[idx]) return;
+  if (_oneTouchDrill.idx === idx) { closeOneTouchDrill(); return; }
+  _oneTouchDrill = { idx: idx, typeFilter: null, productFilter: null };
+  renderOneTouchDetail();
+}
+
+function closeOneTouchDrill() {
+  _oneTouchDrill = { idx: null, typeFilter: null, productFilter: null };
+  closeSidePanel(document.getElementById('onetouch-section'));
+}
+
+function oneTouchFilterType(type) {
+  _oneTouchDrill.typeFilter = _oneTouchDrill.typeFilter === type ? null : type;
+  renderOneTouchDetail();
+}
+function oneTouchFilterProduct(prod) {
+  _oneTouchDrill.productFilter = _oneTouchDrill.productFilter === prod ? null : prod;
+  renderOneTouchDetail();
+}
+
+function renderOneTouchDetail() {
+  const d = DATA.oneTouch[currentPeriod];
+  const agent = d.by_agent[_oneTouchDrill.idx];
+  const section = document.getElementById('onetouch-section');
+  const tf = _oneTouchDrill.typeFilter, pf = _oneTouchDrill.productFilter;
+  const tickets = agent.tickets || [];
+
+  let html = '<button class="sp-close" onclick="closeOneTouchDrill()">&times;</button>';
+  const crumbs = [{label: agent.name}];
+  if (tf) crumbs.push({label: tf});
+  if (pf) crumbs.push({label: pf});
+  html += spBreadcrumb(crumbs);
+
+  // Summary cards
+  html += '<div class="summary-cards" style="grid-template-columns:repeat(3,1fr)">';
+  html += '<div class="metric-card"><div class="metric-label">Closed</div><div class="metric-value" style="font-size:18px">' + fmtNum(agent.closed) + '</div></div>';
+  html += '<div class="metric-card"><div class="metric-label">One-touch</div><div class="metric-value" style="font-size:18px">' + fmtNum(agent.one_touch) + '</div></div>';
+  html += '<div class="metric-card"><div class="metric-label">Rate</div><div class="metric-value" style="font-size:18px;color:var(--accent-green)">' + (agent.rate!=null?agent.rate.toFixed(1)+'%':'--') + '</div></div>';
+  html += '</div>';
+
+  // Type filter
+  const types = buildFilters(tickets, 'type');
+  if (types.length) {
+    html += '<div class="sp-section-label">Filter by type</div><div class="sp-filter-list">';
+    types.forEach(([type, count]) => {
+      const active = tf === type ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="oneTouchFilterType(\''+type.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+type+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Product filter
+  const products = buildFilters(tickets, 'product');
+  if (products.length) {
+    html += '<div class="sp-section-label">Filter by product</div><div class="sp-filter-list">';
+    products.forEach(([prod, count]) => {
+      const active = pf === prod ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="oneTouchFilterProduct(\''+prod.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+prod+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Filtered ticket list
+  const filtered = filterTicketList(tickets, { type: tf, product: pf });
+  const filterDesc = [tf, pf].filter(Boolean).join(' + ') || 'all';
+  html += '<div class="sp-section-label">Tickets — ' + filtered.length + ' (' + filterDesc + ')</div>';
+  html += '<div class="table-wrap">' + ticketTable(filtered) + '</div>';
+
+  openSidePanel(section, null, html);
+}
+
+// ============================================================
+// RENDER: WORKLOAD
+// ============================================================
+function renderWorkload() {
+  const d = DATA.workload;
+  if (!d || !d.length) { document.getElementById('workload-table-wrap').innerHTML = ''; return; }
+  let h = '<table><thead><tr><th>Agent</th><th>Total</th><th>0-7d</th><th>7-30d</th><th>30-90d</th><th>90+d</th></tr></thead><tbody>';
+  d.forEach((r, i) => {
+    h += '<tr><td><a href="javascript:void(0)" onclick="drilldownWorkload('+i+',\'all\')">' + r.name + '</a></td>';
+    h += '<td>' + fmtNum(r.open) + '</td>';
+    h += '<td><a href="javascript:void(0)" onclick="drilldownWorkload('+i+',\'d7\')">' + fmtNum(r.d7) + '</a></td>';
+    h += '<td><a href="javascript:void(0)" onclick="drilldownWorkload('+i+',\'d30\')">' + fmtNum(r.d30) + '</a></td>';
+    h += '<td><a href="javascript:void(0)" onclick="drilldownWorkload('+i+',\'d90\')">' + fmtNum(r.d90) + '</a></td>';
+    h += '<td><a href="javascript:void(0)" onclick="drilldownWorkload('+i+',\'d90plus\')">' + fmtNum(r.d90plus) + '</a></td></tr>';
+  });
+  document.getElementById('workload-table-wrap').innerHTML = h + '</tbody></table>';
+}
+let _workloadDrill = { idx: null, bucket: null, typeFilter: null, productFilter: null };
+
+function drilldownWorkload(idx, bucket) {
+  const d = DATA.workload;
+  if (!d || !d[idx]) return;
+  if (_workloadDrill.idx === idx && _workloadDrill.bucket === bucket) { closeWorkloadDrill(); return; }
+  _workloadDrill = { idx: idx, bucket: bucket, typeFilter: null, productFilter: null };
+  renderWorkloadDetail();
+}
+
+function closeWorkloadDrill() {
+  _workloadDrill = { idx: null, bucket: null, typeFilter: null, productFilter: null };
+  closeSidePanel(document.getElementById('workload-section'));
+}
+
+function workloadFilterType(type) {
+  _workloadDrill.typeFilter = _workloadDrill.typeFilter === type ? null : type;
+  renderWorkloadDetail();
+}
+function workloadFilterProduct(prod) {
+  _workloadDrill.productFilter = _workloadDrill.productFilter === prod ? null : prod;
+  renderWorkloadDetail();
+}
+
+function renderWorkloadDetail() {
+  const d = DATA.workload;
+  const r = d[_workloadDrill.idx];
+  const bucket = _workloadDrill.bucket;
+  const section = document.getElementById('workload-section');
+  const tf = _workloadDrill.typeFilter, pf = _workloadDrill.productFilter;
+
+  let tickets;
+  const labels = {d7:'0-7 days',d30:'7-30 days',d90:'30-90 days',d90plus:'90+ days'};
+  let bucketLabel;
+  if (bucket === 'all') { tickets = [].concat(r.tickets.d7||[], r.tickets.d30||[], r.tickets.d90||[], r.tickets.d90plus||[]); bucketLabel = 'All Open'; }
+  else { tickets = r.tickets[bucket] || []; bucketLabel = labels[bucket] || bucket; }
+
+  let html = '<button class="sp-close" onclick="closeWorkloadDrill()">&times;</button>';
+  const crumbs = [{label: r.name}, {label: bucketLabel}];
+  if (tf) crumbs.push({label: tf});
+  if (pf) crumbs.push({label: pf});
+  html += spBreadcrumb(crumbs);
+
+  // Type filter
+  const types = buildFilters(tickets, 'type');
+  if (types.length) {
+    html += '<div class="sp-section-label">Filter by type</div><div class="sp-filter-list">';
+    types.forEach(([type, count]) => {
+      const active = tf === type ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="workloadFilterType(\''+type.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+type+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Product filter
+  const products = buildFilters(tickets, 'product');
+  if (products.length) {
+    html += '<div class="sp-section-label">Filter by product</div><div class="sp-filter-list">';
+    products.forEach(([prod, count]) => {
+      const active = pf === prod ? ' active' : '';
+      html += '<div class="sp-filter-item'+active+'" onclick="workloadFilterProduct(\''+prod.replace(/'/g,"\\'")+'\')" title="Click to filter"><span>'+prod+'</span><span class="sp-count">'+fmtNum(count)+'</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Filtered ticket list
+  const filtered = filterTicketList(tickets, { type: tf, product: pf });
+  const filterDesc = [tf, pf].filter(Boolean).join(' + ') || 'all';
+  html += '<div class="sp-section-label">Tickets — ' + filtered.length + ' (' + filterDesc + ')</div>';
+  html += '<div class="table-wrap">' + ticketTable(filtered) + '</div>';
+
+  openSidePanel(section, null, html);
+}
+
+// ============================================================
+// RENDER: TICKET TYPES
+// ============================================================
+function renderTicketType() {
+  const d = DATA.ticketType ? DATA.ticketType[currentPeriod] : null;
+  if (!d) return;
+  if (typeChartObj) typeChartObj.destroy();
+  const items = d[typeFamily] || [];
+  if (items.length) {
+    typeChartObj = new Chart(document.getElementById('typeChart'), {
+      type:'doughnut',
+      data:{labels:items.map(r=>r.type), datasets:[{data:items.map(r=>r.n), backgroundColor:COLORS.slice(0,items.length), borderWidth:0}]},
+      options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{color:'#9ca0ab',font:{size:10}}},
+        tooltip:makeExternalTooltip(ttDonut)
+      }}
+    });
+    addDrilldownToDonut(typeChartObj, items);
+  }
+}
+
+function setTypeFamily(fam, btn) {
+  typeFamily = fam;
+  document.getElementById('type-family-sw').querySelectorAll('.sw-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTicketType();
+}
+
+// ============================================================
+// RENDER: PRODUCT
+// ============================================================
+function renderProduct() {
+  const d = DATA.product ? DATA.product[currentPeriod] : null;
+  if (!d || !d.length) return;
+  if (productChartObj) productChartObj.destroy();
+  productChartObj = new Chart(document.getElementById('productChart'), {
+    type:'doughnut',
+    data:{labels:d.map(r=>r.product), datasets:[{data:d.map(r=>r.n), backgroundColor:COLORS.slice(0,d.length), borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{color:'#9ca0ab',font:{size:11}}},
+      tooltip:makeExternalTooltip(ttDonut)
+    }}
+  });
+  addDrilldownToDonut(productChartObj, d);
+}
+
+// ============================================================
+// RENDER: CSAT
+// ============================================================
+function renderCsat() {
+  const surveys = DATA.csat ? DATA.csat[currentPeriod] : null;
+  if (!surveys || !surveys.length) {
+    document.getElementById('csat-grid').innerHTML = '<div class="csat-card"><div class="metric-label">No CSAT data for this period</div></div>';
+    return;
+  }
+  document.getElementById('csat-grid').innerHTML = surveys.map(s => {
+    const posRate = s.n > 0 ? Math.round(s.positive / s.n * 100) : 0;
+    const negRate = s.n > 0 ? Math.round(s.negative / s.n * 100) : 0;
+    return `<div class="csat-card">
+      <div class="metric-label">${s.survey}</div>
+      <div class="metric-value" style="margin:6px 0">${s.avg != null ? s.avg.toFixed(2) : '--'} <span style="font-size:13px;font-weight:400;color:var(--text-secondary)">/ 7</span></div>
+      <div class="metric-sub">${fmtNum(s.n)} responses</div>
+      <div style="display:flex;gap:12px;margin-top:8px;font-size:12px">
+        <span style="color:#34d399">${posRate}% positive</span>
+        <span style="color:#f87171">${negRate}% negative</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// RENDER: REOPEN RATE
+// ============================================================
+function renderReopen() {
+  const d = DATA.reopen ? DATA.reopen[currentPeriod] : null;
+  if (!d) { document.getElementById('reopen-cards').innerHTML = ''; return; }
+  const rate = d.total_closed ? ((d.reopened / d.total_closed) * 100).toFixed(1) : '0.0';
+  document.getElementById('reopen-cards').innerHTML =
+    '<div class="metric-card"><div class="metric-label">Total closed</div><div class="metric-value">' + fmtNum(d.total_closed) + '</div></div>' +
+    '<div class="metric-card"><div class="metric-label">Reopened</div><div class="metric-value" style="color:var(--accent-amber)">' + fmtNum(d.reopened) + '</div></div>' +
+    '<div class="metric-card"><div class="metric-label">Reopen rate</div><div class="metric-value">' + rate + '%</div></div>';
+}
+
+// ============================================================
+// RENDER: TOUCHES
+// ============================================================
+function renderTouches() {
+  const d = DATA.touches ? DATA.touches[currentPeriod] : null;
+  if (!d) return;
+  if (touchesChartObj) touchesChartObj.destroy();
+  if (d.buckets && d.buckets.length) {
+    touchesChartObj = new Chart(document.getElementById('touchesChart'), {
+      type:'bar',
+      data:{ labels:d.buckets.map(b=>b.label), datasets:[{label:'Tickets',data:d.buckets.map(b=>b.n),backgroundColor:'rgba(91,141,239,0.5)'}] },
+      options: chartOpts({ plugins:{legend:{display:false},tooltip:makeExternalTooltip(ttTouches)}, scales:{ x:{ticks:{color:TICK_COLOR},grid:{display:false}}, y:{ticks:{color:TICK_COLOR},grid:{color:GRID_COLOR}} } })
+    });
+  }
+  document.getElementById('touches-summary').textContent = 'Avg touches: ' + (d.avg != null ? d.avg.toFixed(1) : '--') + ' | Total: ' + fmtNum(d.total);
+  if (d.by_agent && d.by_agent.length) {
+    let h = '<table><thead><tr><th>Agent</th><th>Avg touches</th><th>Tickets</th></tr></thead><tbody>';
+    d.by_agent.forEach(a => { h += '<tr><td>' + a.name + '</td><td>' + (a.avg_touches!=null?a.avg_touches.toFixed(1):'--') + '</td><td>' + fmtNum(a.n) + '</td></tr>'; });
+    document.getElementById('touches-table-wrap').innerHTML = h + '</tbody></table>';
+  }
+}
+
+// ============================================================
+// RENDER: HEATMAP
+// ============================================================
+function renderHeatmap() {
+  const d = DATA.heatmap;
+  if (!d || !d.length) { document.getElementById('heatmap-wrap').innerHTML = ''; return; }
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const hourLabels = ['12a','1a','2a','3a','4a','5a','6a','7a','8a','9a','10a','11a','12p','1p','2p','3p','4p','5p','6p','7p','8p','9p','10p','11p'];
+  let maxVal = 0, grandTotal = 0, peakDay = 0, peakHour = 0, peakVal = 0;
+  const rowTotals = [], colTotals = new Array(24).fill(0);
+  for (let di = 0; di < 7; di++) {
+    let rt = 0;
+    for (let hi = 0; hi < 24; hi++) {
+      const v = d[di] ? (d[di][hi]||0) : 0;
+      if (v > maxVal) maxVal = v;
+      if (v > peakVal) { peakVal = v; peakDay = di; peakHour = hi; }
+      grandTotal += v; rt += v; colTotals[hi] += v;
+    }
+    rowTotals.push(rt);
+  }
+  let h = '<div style="overflow-x:auto"><table class="heatmap-table"><thead><tr><th></th>';
+  hourLabels.forEach(l => { h += '<th>' + l + '</th>'; });
+  h += '<th>Total</th></tr></thead><tbody>';
+  for (let di = 0; di < 7; di++) {
+    h += '<tr><th>' + days[di] + '</th>';
+    for (let hi = 0; hi < 24; hi++) {
+      const v = d[di] ? (d[di][hi]||0) : 0;
+      const intensity = maxVal ? (v/maxVal) : 0;
+      const bg = v === 0 ? 'var(--bg-primary)' : 'rgba(91,141,239,' + (0.15+intensity*0.85).toFixed(2) + ')';
+      h += '<td class="heatmap-cell" style="background:' + bg + ';color:' + (intensity>0.5?'#fff':'var(--text-secondary)') + '">' + (v||'') + '</td>';
+    }
+    h += '<td style="font-weight:600;color:var(--text-secondary)">' + rowTotals[di] + '</td></tr>';
+  }
+  h += '<tr><th>Total</th>';
+  colTotals.forEach(c => { h += '<td style="font-weight:600;color:var(--text-secondary)">' + c + '</td>'; });
+  h += '<td style="font-weight:700;color:var(--text-primary)">' + grandTotal + '</td></tr></tbody></table></div>';
+  const peakFmt = peakHour===0?'12:00 AM':peakHour<12?peakHour+':00 AM':peakHour===12?'12:00 PM':(peakHour-12)+':00 PM';
+  h += '<p style="font-size:11px;color:var(--text-tertiary);margin-top:8px">Peak: ' + days[peakDay] + ' at ' + peakFmt + ' UTC &middot; ' + fmtNum(grandTotal) + ' tickets total over last 90 days</p>';
+  document.getElementById('heatmap-wrap').innerHTML = h;
+}
+
+// ============================================================
+// RENDER: RESOLUTION RATE TREND
+// ============================================================
+function renderResTrend() {
+  const d = DATA.resTrend;
+  if (!d || !d.length) return;
+  if (resTrendChartObj) resTrendChartObj.destroy();
+  resTrendChartObj = new Chart(document.getElementById('resTrendChart'), {
+    type:'bar',
+    data:{
+      labels:d.map(r=>r.label),
+      datasets:[
+        {type:'bar', label:'Created', data:d.map(r=>r.created), backgroundColor:'rgba(91,141,239,0.4)', yAxisID:'y'},
+        {type:'bar', label:'Closed', data:d.map(r=>r.closed), backgroundColor:'rgba(52,211,153,0.4)', yAxisID:'y'},
+        {type:'line', label:'Resolution Rate %', data:d.map(r=>r.rate), borderColor:'#a78bfa', backgroundColor:'transparent', yAxisID:'y1', tension:0.3, pointRadius:3}
+      ]
+    },
+    options: chartOpts({
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:makeExternalTooltip(ttResTrend)},
+      scales:{
+        x:xAxis(), y:{position:'left',title:{display:true,text:'Tickets',color:TICK_COLOR},ticks:{color:TICK_COLOR},grid:{color:GRID_COLOR}},
+        y1:{position:'right',title:{display:true,text:'Rate %',color:TICK_COLOR},ticks:{color:TICK_COLOR},grid:{drawOnChartArea:false}}
+      }
+    })
+  });
+}
+
+// ============================================================
+// RENDER: TYPE TRENDS
+// ============================================================
+function renderTypeTrend() {
+  const d = DATA.typeTrend;
+  if (!d) return;
+  if (typeTrendChartObj) typeTrendChartObj.destroy();
+  const fam = d[typeTrendFamily];
+  if (fam && fam.series && fam.series.length) {
+    typeTrendChartObj = new Chart(document.getElementById('typeTrendChart'), {
+      type:'line',
+      data:{ labels:fam.months, datasets:fam.series.map((s,i) => ({label:s.type, data:s.values, borderColor:COLORS[i%COLORS.length], backgroundColor:COLORS[i%COLORS.length]+'33', fill:true, tension:0.3, pointRadius:2})) },
+      options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{color:'#9ca0ab',font:{size:10}}},tooltip:makeExternalTooltip(ttTypeTrend)}, scales:{x:{ticks:{color:TICK_COLOR,font:{size:9}},grid:{color:GRID_COLOR},stacked:true}, y:{ticks:{color:TICK_COLOR},grid:{color:GRID_COLOR},stacked:true}}}
+    });
+  }
+}
+
+function setTypeTrendFamily(fam, btn) {
+  typeTrendFamily = fam;
+  document.getElementById('type-trend-sw').querySelectorAll('.sw-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTypeTrend();
+}
+
+// ============================================================
+// EXPAND MODAL
+// ============================================================
+function expandSection(key) {
+  const info = getExpandInfo(key);
+  if (!info) return;
+  document.getElementById('modal-title').textContent = info.title;
+  if (modalChartObj) modalChartObj.destroy();
+  modalChartObj = null;
+  const chartWrap = document.getElementById('modal-chart-wrap');
+  const tableWrap = document.getElementById('modal-table-wrap');
+  if (info.config) { chartWrap.style.display = 'block'; modalChartObj = new Chart(document.getElementById('modalChart').getContext('2d'), info.config); }
+  else { chartWrap.style.display = 'none'; }
+  tableWrap.innerHTML = info.table || '';
+  document.getElementById('expandModal').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('expandModal').classList.remove('open');
+  if (modalChartObj) { modalChartObj.destroy(); modalChartObj = null; }
+}
+document.getElementById('expandModal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+
+function getExpandInfo(key) {
+  const ml = metricLabel();
+  if (key === 'kpi') {
+    const d = DATA.kpi ? DATA.kpi[currentPeriod] : null;
+    if (!d) return null;
+    let t = '<table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>';
+    t += '<tr><td>'+ml+' TTC</td><td>'+msToDays(d[ttcKey()])+' days</td></tr>';
+    t += '<tr><td>'+ml+' FRT</td><td>'+msToHrs(d[frtKey()])+' hrs</td></tr>';
+    t += '<tr><td>Created</td><td>'+fmtNum(d.created)+'</td></tr>';
+    t += '<tr><td>Closed</td><td>'+fmtNum(d.closed)+'</td></tr>';
+    t += '</tbody></table>';
+    return {title:'Key Metrics', table:t};
+  }
+  if (key === 'vol') {
+    const d = DATA[trendDataKey()];
+    if (!d) return null;
+    let t = '<table><thead><tr><th>Period</th><th>Created</th><th>Closed</th></tr></thead><tbody>';
+    d.forEach(r => { t += '<tr><td>'+r.label+'</td><td>'+fmtNum(r.created)+'</td><td>'+fmtNum(r.closed)+'</td></tr>'; });
+    t += '</tbody></table>';
+    const cfg = { type:'bar', data:{ labels:d.map(r=>r.label), datasets:[{label:'Created',data:d.map(r=>r.created),backgroundColor:'#5b8def',borderRadius:3,barPercentage:0.7},{label:'Closed',data:d.map(r=>r.closed),backgroundColor:'#34d399',borderRadius:3,barPercentage:0.7}] }, options:chartOpts({scales:{x:xAxis(),y:yAxis()}}) };
+    return {title:'Ticket Volume Trend', config:cfg, table:t};
+  }
+  if (key === 'ttcfrt') {
+    const d = DATA[trendDataKey()];
+    if (!d) return null;
+    const tk = ttcKey(), fk = frtKey();
+    let t = '<table><thead><tr><th>Period</th><th>'+ml+' TTC (days)</th><th>'+ml+' FRT (hrs)</th></tr></thead><tbody>';
+    d.forEach(r => { t += '<tr><td>'+r.label+'</td><td>'+msToDays(r[tk])+'</td><td>'+msToHrs(r[fk])+'</td></tr>'; });
+    t += '</tbody></table>';
+    const cfg = { type:'line', data:{ labels:d.map(r=>r.label), datasets:[
+      {label:'TTC (days)',data:d.map(r=>r[tk]?+(r[tk]/86400000).toFixed(2):null),borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,0.1)',fill:true,tension:0.3,pointRadius:3,yAxisID:'y',spanGaps:true},
+      {label:'FRT (hrs)',data:d.map(r=>r[fk]?+(r[fk]/3600000).toFixed(2):null),borderColor:'#f0997b',backgroundColor:'rgba(240,153,123,0.1)',fill:true,tension:0.3,pointRadius:3,yAxisID:'y1',spanGaps:true}
+    ]}, options:chartOpts({scales:{x:xAxis(), y:{position:'left',grid:{color:GRID_COLOR},ticks:{color:'#a78bfa',font:{size:11},callback:v=>v+'d'},title:{display:true,text:'TTC (days)',color:'#a78bfa',font:{size:11}}}, y1:{position:'right',grid:{display:false},ticks:{color:'#f0997b',font:{size:11},callback:v=>v+'h'},title:{display:true,text:'FRT (hours)',color:'#f0997b',font:{size:11}}}}}) };
+    return {title:ml+' TTC & FRT Trend', config:cfg, table:t};
+  }
+  if (key === 'rep') {
+    const d = DATA.rep ? DATA.rep[currentPeriod] : null;
+    if (!d) return null;
+    let t = '<table><thead><tr><th>Name</th><th>'+ml+' TTC (days)</th><th>'+ml+' FRT (hrs)</th><th>Closed</th></tr></thead><tbody>';
+    d.forEach(r => { t += '<tr><td>'+r.name+'</td><td>'+msToDays(r[ttcKey()])+'</td><td>'+msToHrs(r[frtKey()])+'</td><td>'+fmtNum(r.closed)+'</td></tr>'; });
+    return {title:'Rep Performance', table:t+'</tbody></table>'};
+  }
+  if (key === 'pipefrt') {
+    const d = DATA.pipeFrt ? DATA.pipeFrt[currentPeriod] : null;
+    if (!d) return null;
+    let t = '<table><thead><tr><th>Pipeline</th><th>'+ml+' FRT (hrs)</th><th>Tickets</th></tr></thead><tbody>';
+    d.forEach(r => { t += '<tr><td>'+r.pipeline+'</td><td>'+msToHrs(r[frtKey()])+'</td><td>'+fmtNum(r.n)+'</td></tr>'; });
+    const colors = d.map(r => { const v=r[frtKey()]||0; const mx=Math.max(...d.map(x=>x[frtKey()]||0)); const p=mx?v/mx:0; return p<0.3?'#34d399':p<0.6?'#fbbf24':'#f87171'; });
+    const cfg = {type:'bar',data:{labels:d.map(r=>r.pipeline),datasets:[{data:d.map(r=>r[frtKey()]?(r[frtKey()]/3600000):0),backgroundColor:colors}]},options:chartOpts({indexAxis:'y',scales:{x:{ticks:{color:TICK_COLOR},grid:{color:GRID_COLOR}},y:{ticks:{color:'#9ca0ab'},grid:{color:GRID_COLOR}}}})};
+    return {title:ml+' First Response Time by Pipeline', config:cfg, table:t+'</tbody></table>'};
+  }
+  if (key === 'stage') {
+    const d = DATA.stageTime ? DATA.stageTime[currentPeriod] : null;
+    if (!d) return null;
+    const sk = stageTimeKey();
+    let t = '';
+    d.forEach(p => {
+      t += '<h3 style="font-size:13px;font-weight:600;margin:12px 0 8px">'+p.pipeline+' <span style="font-weight:400;color:var(--text-tertiary);font-size:11px">'+fmtNum(p.total_n)+' transitions</span></h3>';
+      t += '<table><thead><tr><th>Stage</th><th>'+ml+' Time (hrs)</th><th>Transitions</th><th>Owners</th></tr></thead><tbody>';
+      p.stages.forEach(s => {
+        const ownerList = (s.by_owner||[]).map(o => o.name+' ('+o.n+')').join(', ');
+        t += '<tr><td>'+s.stage+'</td><td>'+msToHrs(s[sk])+'</td><td>'+fmtNum(s.n)+'</td><td style="font-size:11px;color:var(--text-secondary)">'+ownerList+'</td></tr>';
+      });
+      t += '</tbody></table>';
+    });
+    return {title:'Stage Time', table:t};
+  }
+  if (key === 'aging') {
+    const d = DATA.aging; if (!d) return null;
+    let t = '<table><thead><tr><th>Bucket</th><th>Count</th></tr></thead><tbody>';
+    d.forEach(r => { t += '<tr><td>'+r.bucket+'</td><td>'+fmtNum(r.n)+'</td></tr>'; });
+    const cfg = {type:'doughnut',data:{labels:d.map(r=>r.bucket),datasets:[{data:d.map(r=>r.n),backgroundColor:['#34d399','#5b8def','#fbbf24','#f87171'],borderWidth:0}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#9ca0ab'}}}}};
+    return {title:'Backlog Aging', config:cfg, table:t+'</tbody></table>'};
+  }
+  if (key === 'pipevol') {
+    const d = DATA.pipeVol ? DATA.pipeVol[currentPeriod] : null;
+    if (!d) return null;
+    let t = '<table><thead><tr><th>Pipeline</th><th>Created</th><th>Closed</th><th>Open</th></tr></thead><tbody>';
+    d.forEach(r => { t += '<tr><td>'+r.pipeline+'</td><td>'+fmtNum(r.created)+'</td><td>'+fmtNum(r.closed)+'</td><td>'+fmtNum(r.open)+'</td></tr>'; });
+    return {title:'Pipeline Volume', table:t+'</tbody></table>'};
+  }
+  if (key === 'sla') {
+    const d = DATA.sla ? DATA.sla[currentPeriod] : null;
+    if (!d) return null;
+    let t = '<p style="margin-bottom:12px">Overall: ' + (d.overall.rate!=null?d.overall.rate.toFixed(1)+'%':'--') + ' met rate (' + fmtNum(d.overall.met) + ' met, ' + fmtNum(d.overall.breached) + ' breached)</p>';
+    if (d.by_pipeline) { t += '<table><thead><tr><th>Pipeline</th><th>Target</th><th>Met</th><th>Breached</th><th>Rate</th></tr></thead><tbody>'; d.by_pipeline.forEach(r => { t += '<tr><td>'+r.pipeline+'</td><td>'+fmtNum(r.target_hrs)+'h</td><td>'+fmtNum(r.met)+'</td><td>'+fmtNum(r.breached)+'</td><td>'+(r.rate!=null?r.rate.toFixed(1)+'%':'--')+'</td></tr>'; }); t += '</tbody></table>'; }
+    return {title:'SLA Compliance', table:t};
+  }
+  if (key === 'onetouch') {
+    const d = DATA.oneTouch ? DATA.oneTouch[currentPeriod] : null;
+    if (!d) return null;
+    let t = '<p style="margin-bottom:12px">' + fmtNum(d.one_touch) + ' of ' + fmtNum(d.total_closed) + ' (' + (d.rate!=null?d.rate.toFixed(1)+'%':'--') + ')</p>';
+    if (d.by_agent) { t += '<table><thead><tr><th>Name</th><th>Closed</th><th>One-touch</th><th>Rate</th></tr></thead><tbody>'; d.by_agent.forEach(r => { t += '<tr><td>'+r.name+'</td><td>'+fmtNum(r.closed)+'</td><td>'+fmtNum(r.one_touch)+'</td><td>'+(r.rate!=null?r.rate.toFixed(1)+'%':'--')+'</td></tr>'; }); t += '</tbody></table>'; }
+    return {title:'One-Touch Resolution', table:t};
+  }
+  if (key === 'workload') {
+    const d = DATA.workload; if (!d) return null;
+    let t = '<table><thead><tr><th>Agent</th><th>Total</th><th>0-7d</th><th>7-30d</th><th>30-90d</th><th>90+d</th></tr></thead><tbody>';
+    d.forEach(r => { t += '<tr><td>'+r.name+'</td><td>'+fmtNum(r.open)+'</td><td>'+fmtNum(r.d7)+'</td><td>'+fmtNum(r.d30)+'</td><td>'+fmtNum(r.d90)+'</td><td>'+fmtNum(r.d90plus)+'</td></tr>'; });
+    return {title:'Workload Distribution', table:t+'</tbody></table>'};
+  }
+  if (key === 'tickettype') {
+    const d = DATA.ticketType ? DATA.ticketType[currentPeriod] : null;
+    const pd = DATA.product ? DATA.product[currentPeriod] : null;
+    let t = '';
+    if (d) {
+      t += '<h3 style="font-size:13px;font-weight:600;margin-bottom:8px">GitKraken Types</h3><table><thead><tr><th>Type</th><th>Count</th></tr></thead><tbody>';
+      (d.gk||[]).forEach(r => { t += '<tr><td>'+r.type+'</td><td>'+fmtNum(r.n)+'</td></tr>'; });
+      t += '</tbody></table><h3 style="font-size:13px;font-weight:600;margin:16px 0 8px">GIJ Types</h3><table><thead><tr><th>Type</th><th>Count</th></tr></thead><tbody>';
+      (d.gij||[]).forEach(r => { t += '<tr><td>'+r.type+'</td><td>'+fmtNum(r.n)+'</td></tr>'; });
+      t += '</tbody></table>';
+    }
+    if (pd) {
+      t += '<h3 style="font-size:13px;font-weight:600;margin:16px 0 8px">Product Breakdown</h3><table><thead><tr><th>Product</th><th>Count</th></tr></thead><tbody>';
+      pd.forEach(r => { t += '<tr><td>'+r.product+'</td><td>'+fmtNum(r.n)+'</td></tr>'; });
+      t += '</tbody></table>';
+    }
+    return {title:'Ticket Types & Product', table:t};
+  }
+  if (key === 'csat') {
+    const d = DATA.csat ? DATA.csat[currentPeriod] : null;
+    if (!d) return null;
+    let t = '<table><thead><tr><th>Survey</th><th>Type</th><th>Responses</th><th>Avg</th><th>Positive</th><th>Negative</th></tr></thead><tbody>';
+    d.forEach(r => { t += '<tr><td>'+r.survey+'</td><td>'+r.type+'</td><td>'+fmtNum(r.n)+'</td><td>'+(r.avg!=null?r.avg.toFixed(2):'--')+'</td><td>'+fmtNum(r.positive)+'</td><td>'+fmtNum(r.negative)+'</td></tr>'; });
+    return {title:'Customer Satisfaction', table:t+'</tbody></table>'};
+  }
+  if (key === 'reopen') {
+    const d = DATA.reopen ? DATA.reopen[currentPeriod] : null;
+    if (!d) return null;
+    const rate = d.total_closed ? ((d.reopened/d.total_closed)*100).toFixed(1) : '0.0';
+    return {title:'Reopen Rate', table:'<p>Total closed: '+fmtNum(d.total_closed)+' | Reopened: '+fmtNum(d.reopened)+' | Rate: '+rate+'%</p>'};
+  }
+  if (key === 'touches') {
+    const d = DATA.touches ? DATA.touches[currentPeriod] : null;
+    if (!d) return null;
+    let t = '<p style="margin-bottom:12px">Avg: '+(d.avg!=null?d.avg.toFixed(1):'--')+' | Total: '+fmtNum(d.total)+'</p>';
+    if (d.by_agent) { t += '<table><thead><tr><th>Agent</th><th>Avg</th><th>Tickets</th></tr></thead><tbody>'; d.by_agent.forEach(a => { t += '<tr><td>'+a.name+'</td><td>'+(a.avg_touches!=null?a.avg_touches.toFixed(1):'--')+'</td><td>'+fmtNum(a.n)+'</td></tr>'; }); t += '</tbody></table>'; }
+    const cfg = d.buckets ? {type:'bar',data:{labels:d.buckets.map(b=>b.label),datasets:[{data:d.buckets.map(b=>b.n),backgroundColor:'rgba(91,141,239,0.5)'}]},options:chartOpts({scales:{x:{ticks:{color:TICK_COLOR},grid:{display:false}},y:{ticks:{color:TICK_COLOR},grid:{color:GRID_COLOR}}}})} : null;
+    return {title:'Touches Distribution', config:cfg, table:t};
+  }
+  if (key === 'heatmap') {
+    return {title:'Ticket Creation Heatmap', table:document.getElementById('heatmap-wrap').innerHTML};
+  }
+  if (key === 'restrend') {
+    const d = DATA.resTrend; if (!d) return null;
+    let t = '<table><thead><tr><th>Period</th><th>Created</th><th>Closed</th><th>Rate %</th></tr></thead><tbody>';
+    d.forEach(r => { t += '<tr><td>'+r.label+'</td><td>'+fmtNum(r.created)+'</td><td>'+fmtNum(r.closed)+'</td><td>'+(r.rate!=null?r.rate.toFixed(1):'--')+'</td></tr>'; });
+    const cfg = {type:'bar',data:{labels:d.map(r=>r.label),datasets:[{type:'bar',label:'Created',data:d.map(r=>r.created),backgroundColor:'rgba(91,141,239,0.4)',yAxisID:'y'},{type:'bar',label:'Closed',data:d.map(r=>r.closed),backgroundColor:'rgba(52,211,153,0.4)',yAxisID:'y'},{type:'line',label:'Rate %',data:d.map(r=>r.rate),borderColor:'#a78bfa',backgroundColor:'transparent',yAxisID:'y1',tension:0.3,pointRadius:3}]},options:chartOpts({scales:{x:xAxis(),y:yAxis({title:{display:true,text:'Tickets',color:TICK_COLOR}}),y1:{position:'right',title:{display:true,text:'%',color:TICK_COLOR},ticks:{color:TICK_COLOR},grid:{drawOnChartArea:false}}}})};
+    return {title:'Resolution Rate Trend', config:cfg, table:t+'</tbody></table>'};
+  }
+  if (key === 'typetrend') {
+    const d = DATA.typeTrend; if (!d) return null;
+    let t = '';
+    if (d.gk && d.gk.series) {
+      t += '<h3 style="font-size:13px;font-weight:600;margin-bottom:8px">GitKraken</h3><table><thead><tr><th>Type</th>';
+      (d.gk.months||[]).forEach(m => { t += '<th>'+m+'</th>'; }); t += '</tr></thead><tbody>';
+      d.gk.series.forEach(s => { t += '<tr><td>'+s.type+'</td>'; s.values.forEach(v => { t += '<td>'+fmtNum(v)+'</td>'; }); t += '</tr>'; }); t += '</tbody></table>';
+    }
+    if (d.gij && d.gij.series) {
+      t += '<h3 style="font-size:13px;font-weight:600;margin:16px 0 8px">GIJ</h3><table><thead><tr><th>Type</th>';
+      (d.gij.months||[]).forEach(m => { t += '<th>'+m+'</th>'; }); t += '</tr></thead><tbody>';
+      d.gij.series.forEach(s => { t += '<tr><td>'+s.type+'</td>'; s.values.forEach(v => { t += '<td>'+fmtNum(v)+'</td>'; }); t += '</tr>'; }); t += '</tbody></table>';
+    }
+    return {title:'Type Trends', table:t};
+  }
+  return null;
+}
+
+// ============================================================
+// RENDER ALL
+// ============================================================
+function renderAll() {
+  ensureTableContainers();
+  renderKPI();
+  renderVolChart();
+  renderTtcChart();
+  renderRepTable();
+  renderPipeFrt();
+  renderPipeVol();
+  renderStageTable();
+  renderAging();
+  renderSla();
+  renderOneTouch();
+  renderWorkload();
+  renderTicketType();
+  renderProduct();
+  renderCsat();
+  renderReopen();
+  renderTouches();
+  renderHeatmap();
+  renderResTrend();
+  renderTypeTrend();
+  refreshOpenTableViews();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.getElementById('gen-date').textContent = new Date().toLocaleDateString();
+renderAll();
+</script>
+</body>
+</html>
