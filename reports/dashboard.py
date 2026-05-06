@@ -22,10 +22,14 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from config import OUTPUTS_DIR, SUPPORT_OWNER_IDS
+from config import (OUTPUTS_DIR, SUPPORT_OWNER_IDS, ACTIVE_PIPELINES,
+                    SLA_BUSINESS_HOURS_START, SLA_BUSINESS_HOURS_END)
 from reports.lib.db import connect
 
 log = logging.getLogger(__name__)
+
+# Set of active support pipeline IDs for pipeline-entry detection
+_ACTIVE_SUPPORT_PIDS = set(ACTIVE_PIPELINES.keys())
 
 
 # ---------------------------------------------------------------------------
@@ -38,6 +42,41 @@ def _safe_median(vals: list[int | float]) -> float | None:
 
 def _safe_mean(vals: list[int | float]) -> float | None:
     return statistics.mean(vals) if vals else None
+
+
+def _biz_hours(start_str: str, end_str: str) -> float | None:
+    """Compute business hours between two ISO timestamps.
+
+    Business hours: Mon-Fri, SLA_BUSINESS_HOURS_START to SLA_BUSINESS_HOURS_END UTC.
+    Returns hours as a float, or None if inputs are invalid.
+    """
+    try:
+        c = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+        r = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+    except (ValueError, TypeError):
+        return None
+    if r <= c:
+        return 0.0
+    hours = 0.0
+    cur = c
+    while cur < r:
+        wd = cur.weekday()
+        if wd < 5:  # Mon-Fri
+            day_start = cur.replace(hour=SLA_BUSINESS_HOURS_START, minute=0, second=0, microsecond=0)
+            day_end = cur.replace(hour=SLA_BUSINESS_HOURS_END, minute=0, second=0, microsecond=0)
+            work_start = max(cur, day_start)
+            work_end = min(r, day_end)
+            if work_start < work_end:
+                hours += (work_end - work_start).total_seconds() / 3600
+        next_day = (cur + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        cur = next_day
+    return round(hours, 2)
+
+
+def _biz_hours_ms(start_str: str, end_str: str) -> int | None:
+    """Like _biz_hours but returns milliseconds (for consistency with wall-clock ms values)."""
+    bh = _biz_hours(start_str, end_str)
+    return round(bh * 3_600_000) if bh is not None else None
 
 
 def _ticket_details(conn: sqlite3.Connection, ticket_ids: list, limit: int = 50) -> list[dict]:
@@ -61,8 +100,42 @@ def _ticket_details(conn: sqlite3.Connection, ticket_ids: list, limit: int = 50)
              'created': r[4], 'type': r[5], 'product': r[6]} for r in rows]
 
 
-def _ttc_for_range(conn: sqlite3.Connection, start: str, end: str) -> list[int]:
-    """Return list of first-time-to-close values (ms) for tickets first-closed in [start, end)."""
+def _pipeline_entry_map(conn: sqlite3.Connection, ticket_ids: list | None = None) -> dict[str, str]:
+    """Return {ticket_id: earliest_transition_at} for first entry into an active support pipeline.
+
+    For tickets that were originally created in a support pipeline, this returns
+    their first stage transition in that pipeline.  For tickets that were moved
+    from the free queue (or any non-support pipeline), this returns the first
+    transition into a support pipeline stage.
+
+    If ticket_ids is None, returns the map for ALL tickets with stage transitions
+    into support pipelines.
+    """
+    placeholders_clause = ""
+    params: list = []
+    if ticket_ids:
+        placeholders = ','.join('?' * len(ticket_ids))
+        placeholders_clause = f"AND st.ticket_id IN ({placeholders})"
+        params = list(ticket_ids)
+
+    rows = conn.execute(f'''
+        SELECT st.ticket_id, MIN(st.transition_at) as entry_at
+        FROM stage_transitions st
+        JOIN pipeline_stages ps ON ps.stage_id = st.to_stage
+        JOIN pipelines p ON p.pipeline_id = ps.pipeline_id
+        WHERE p.is_active_support = 1 AND p.is_legacy = 0
+          {placeholders_clause}
+        GROUP BY st.ticket_id
+    ''', params).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+def _ttc_for_range(conn: sqlite3.Connection, start: str, end: str) -> dict:
+    """Return dict with wall-clock and business-hours TTC for tickets first-closed in [start, end).
+
+    Returns:
+        {'wall': [ms, ...], 'biz': [ms, ...]}
+    """
     rows = conn.execute('''
         WITH first_close AS (
             SELECT st.ticket_id, MIN(st.transition_at) as fc
@@ -74,24 +147,84 @@ def _ttc_for_range(conn: sqlite3.Connection, start: str, end: str) -> list[int]:
               AND t.bulk_close_tag IS NULL
             GROUP BY st.ticket_id
         )
-        SELECT CAST((julianday(fc.fc) - julianday(t.createdate)) * 86400000 AS INTEGER) as ttc_ms
+        SELECT fc.ticket_id, t.createdate, fc.fc
         FROM first_close fc
         JOIN tickets t ON t.id = fc.ticket_id
         WHERE fc.fc >= ? AND fc.fc < ? AND t.createdate IS NOT NULL
     ''', (start, end)).fetchall()
-    return [r[0] for r in rows if r[0] and r[0] > 0]
+
+    if not rows:
+        return {'wall': [], 'biz': []}
+
+    # Get pipeline entry times for these tickets
+    tids = [r[0] for r in rows]
+    entry_map = _pipeline_entry_map(conn, tids)
+
+    wall_vals: list[int] = []
+    biz_vals: list[int] = []
+    for tid, createdate, close_at in rows:
+        # Wall-clock TTC: close_at - createdate
+        try:
+            c = datetime.fromisoformat(createdate.replace('Z', '+00:00'))
+            f = datetime.fromisoformat(close_at.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            continue
+        wall_ms = int((f - c).total_seconds() * 1000)
+        if wall_ms > 0:
+            wall_vals.append(wall_ms)
+
+        # Biz-hours TTC: from pipeline entry (or createdate) to close
+        entry_at = entry_map.get(tid, createdate)
+        biz_ms = _biz_hours_ms(entry_at, close_at)
+        if biz_ms is not None and biz_ms > 0:
+            biz_vals.append(biz_ms)
+
+    return {'wall': wall_vals, 'biz': biz_vals}
 
 
-def _frt_for_range(conn: sqlite3.Connection, start: str, end: str) -> list[int]:
-    """Return list of FRT values (ms) for tickets created in [start, end)."""
+def _frt_for_range(conn: sqlite3.Connection, start: str, end: str) -> dict:
+    """Return dict with wall-clock and business-hours FRT for tickets created in [start, end).
+
+    Locally computed from first_agent_reply_date - createdate (wall-clock)
+    and first_agent_reply_date - pipeline_entry_time (biz-hours/SLA).
+
+    Returns:
+        {'wall': [ms, ...], 'biz': [ms, ...]}
+    """
     rows = conn.execute('''
-        SELECT t.time_to_first_agent_reply as frt_ms
+        SELECT t.id, t.createdate, t.first_agent_reply_date
         FROM tickets t
         JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
         WHERE t.createdate >= ? AND t.createdate < ?
-          AND t.time_to_first_agent_reply IS NOT NULL AND p.is_legacy = 0
+          AND t.first_agent_reply_date IS NOT NULL AND p.is_legacy = 0
     ''', (start, end)).fetchall()
-    return [r[0] for r in rows if r[0] and r[0] > 0]
+
+    if not rows:
+        return {'wall': [], 'biz': []}
+
+    tids = [r[0] for r in rows]
+    entry_map = _pipeline_entry_map(conn, tids)
+
+    wall_vals: list[int] = []
+    biz_vals: list[int] = []
+    for tid, createdate, reply_date in rows:
+        # Wall-clock FRT: reply_date - createdate
+        try:
+            c = datetime.fromisoformat(createdate.replace('Z', '+00:00'))
+            r = datetime.fromisoformat(reply_date.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            continue
+        wall_ms = int((r - c).total_seconds() * 1000)
+        if wall_ms > 0:
+            wall_vals.append(wall_ms)
+
+        # Biz-hours FRT: from pipeline entry (or createdate) to reply, in business hours
+        entry_at = entry_map.get(tid, createdate)
+        biz_ms = _biz_hours_ms(entry_at, reply_date)
+        if biz_ms is not None and biz_ms > 0:
+            biz_vals.append(biz_ms)
+
+    return {'wall': wall_vals, 'biz': biz_vals}
 
 
 def _created_count(conn: sqlite3.Connection, start: str, end: str) -> int:
@@ -124,19 +257,25 @@ def collect_trend_data(conn: sqlite3.Connection, ranges: list[tuple[str, str, st
     """Collect trend data for a list of (label, start_iso, end_iso) tuples."""
     results = []
     for label, start, end in ranges:
-        ttc_vals = _ttc_for_range(conn, start, end)
-        frt_vals = _frt_for_range(conn, start, end)
+        ttc = _ttc_for_range(conn, start, end)
+        frt = _frt_for_range(conn, start, end)
         created = _created_count(conn, start, end)
         results.append({
             'label': label,
-            'ttc_median_ms': _safe_median(ttc_vals),
-            'ttc_mean_ms': _safe_mean(ttc_vals),
-            'ttc_n': len(ttc_vals),
-            'frt_median_ms': _safe_median(frt_vals),
-            'frt_mean_ms': _safe_mean(frt_vals),
-            'frt_n': len(frt_vals),
+            # Wall-clock metrics (actual elapsed time)
+            'ttc_median_ms': _safe_median(ttc['wall']),
+            'ttc_mean_ms': _safe_mean(ttc['wall']),
+            'ttc_n': len(ttc['wall']),
+            'frt_median_ms': _safe_median(frt['wall']),
+            'frt_mean_ms': _safe_mean(frt['wall']),
+            'frt_n': len(frt['wall']),
+            # Business-hours metrics (SLA-corrected)
+            'ttc_biz_median_ms': _safe_median(ttc['biz']),
+            'ttc_biz_mean_ms': _safe_mean(ttc['biz']),
+            'frt_biz_median_ms': _safe_median(frt['biz']),
+            'frt_biz_mean_ms': _safe_mean(frt['biz']),
             'created': created,
-            'closed': len(ttc_vals),
+            'closed': len(ttc['wall']),
         })
     return results
 
@@ -199,7 +338,12 @@ def collect_quarterly(conn: sqlite3.Connection) -> list[dict]:
 
 
 def collect_rep_performance(conn: sqlite3.Connection, start: str, end: str) -> list[dict]:
-    """Rep performance (TTC, FRT, closed) for support team members."""
+    """Rep performance (TTC, FRT, closed) for support team members.
+
+    TTC: locally computed from stage_transitions (wall-clock + biz hours).
+    FRT: locally computed from first_agent_reply_date - createdate/pipeline_entry (wall-clock + biz hours).
+    """
+    # --- TTC per owner (locally computed from stage transitions) ---
     ttc_rows = conn.execute('''
         WITH first_close AS (
             SELECT st.ticket_id, MIN(st.transition_at) as fc
@@ -211,41 +355,68 @@ def collect_rep_performance(conn: sqlite3.Connection, start: str, end: str) -> l
             GROUP BY st.ticket_id
         )
         SELECT t.hubspot_owner_id as oid, o.name as oname,
-               CAST((julianday(fc.fc) - julianday(t.createdate))*86400000 AS INTEGER) as ttc_ms,
-               t.id as ticket_id
+               t.id as ticket_id, t.createdate, fc.fc
         FROM first_close fc JOIN tickets t ON t.id = fc.ticket_id
         LEFT JOIN owners o ON o.owner_id = CAST(t.hubspot_owner_id AS INTEGER)
         WHERE fc.fc >= ? AND fc.fc < ? AND t.createdate IS NOT NULL
     ''', (start, end)).fetchall()
 
+    # --- FRT per owner (locally computed from first_agent_reply_date) ---
     frt_rows = conn.execute('''
-        SELECT t.hubspot_owner_id as oid, o.name as oname, t.time_to_first_agent_reply as frt_ms
+        SELECT t.hubspot_owner_id as oid, o.name as oname,
+               t.id as ticket_id, t.createdate, t.first_agent_reply_date
         FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
         LEFT JOIN owners o ON o.owner_id = CAST(t.hubspot_owner_id AS INTEGER)
         WHERE t.createdate >= ? AND t.createdate < ?
-          AND t.time_to_first_agent_reply IS NOT NULL AND p.is_legacy = 0
+          AND t.first_agent_reply_date IS NOT NULL AND p.is_legacy = 0
     ''', (start, end)).fetchall()
 
+    # Get pipeline entry times for all relevant tickets
+    all_tids = list(set([r[2] for r in ttc_rows] + [r[2] for r in frt_rows]))
+    entry_map = _pipeline_entry_map(conn, all_tids) if all_tids else {}
+
     by_owner: dict[str, dict] = defaultdict(
-        lambda: {'name': '', 'ttc_vals': [], 'frt_vals': [], 'closed': 0, 'ticket_ids': []}
+        lambda: {'name': '', 'ttc_wall': [], 'ttc_biz': [],
+                 'frt_wall': [], 'frt_biz': [], 'closed': 0, 'ticket_ids': []}
     )
-    for oid_raw, oname, ttc_ms, ticket_id in ttc_rows:
+
+    for oid_raw, oname, ticket_id, createdate, close_at in ttc_rows:
         oid = str(oid_raw) if oid_raw else 'null'
         if oid_raw and int(oid_raw) not in SUPPORT_OWNER_IDS:
             continue
         by_owner[oid]['name'] = oname or 'Unassigned'
-        if ttc_ms and ttc_ms > 0:
-            by_owner[oid]['ttc_vals'].append(ttc_ms)
+        try:
+            c = datetime.fromisoformat(createdate.replace('Z', '+00:00'))
+            f = datetime.fromisoformat(close_at.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            continue
+        wall_ms = int((f - c).total_seconds() * 1000)
+        if wall_ms > 0:
+            by_owner[oid]['ttc_wall'].append(wall_ms)
             by_owner[oid]['closed'] += 1
             by_owner[oid]['ticket_ids'].append(ticket_id)
+        entry_at = entry_map.get(ticket_id, createdate)
+        biz_ms = _biz_hours_ms(entry_at, close_at)
+        if biz_ms is not None and biz_ms > 0:
+            by_owner[oid]['ttc_biz'].append(biz_ms)
 
-    for oid_raw, oname, frt_ms in frt_rows:
+    for oid_raw, oname, ticket_id, createdate, reply_date in frt_rows:
         oid = str(oid_raw) if oid_raw else 'null'
         if oid_raw and int(oid_raw) not in SUPPORT_OWNER_IDS:
             continue
         by_owner[oid]['name'] = oname or 'Unassigned'
-        if frt_ms and frt_ms > 0:
-            by_owner[oid]['frt_vals'].append(frt_ms)
+        try:
+            c = datetime.fromisoformat(createdate.replace('Z', '+00:00'))
+            r = datetime.fromisoformat(reply_date.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            continue
+        wall_ms = int((r - c).total_seconds() * 1000)
+        if wall_ms > 0:
+            by_owner[oid]['frt_wall'].append(wall_ms)
+        entry_at = entry_map.get(ticket_id, createdate)
+        biz_ms = _biz_hours_ms(entry_at, reply_date)
+        if biz_ms is not None and biz_ms > 0:
+            by_owner[oid]['frt_biz'].append(biz_ms)
 
     reps = []
     for d in by_owner.values():
@@ -257,10 +428,16 @@ def collect_rep_performance(conn: sqlite3.Connection, start: str, end: str) -> l
             products[t['product']] += 1
         reps.append({
             'name': d['name'],
-            'ttc_median_ms': _safe_median(d['ttc_vals']),
-            'ttc_mean_ms': _safe_mean(d['ttc_vals']),
-            'frt_median_ms': _safe_median(d['frt_vals']),
-            'frt_mean_ms': _safe_mean(d['frt_vals']),
+            # Wall-clock
+            'ttc_median_ms': _safe_median(d['ttc_wall']),
+            'ttc_mean_ms': _safe_mean(d['ttc_wall']),
+            'frt_median_ms': _safe_median(d['frt_wall']),
+            'frt_mean_ms': _safe_mean(d['frt_wall']),
+            # Business-hours (SLA-corrected)
+            'ttc_biz_median_ms': _safe_median(d['ttc_biz']),
+            'ttc_biz_mean_ms': _safe_mean(d['ttc_biz']),
+            'frt_biz_median_ms': _safe_median(d['frt_biz']),
+            'frt_biz_mean_ms': _safe_mean(d['frt_biz']),
             'closed': d['closed'],
             'tickets': tickets,
             'types': [{'type': k, 'n': v} for k, v in sorted(types.items(), key=lambda x: x[1], reverse=True)],
@@ -271,22 +448,42 @@ def collect_rep_performance(conn: sqlite3.Connection, start: str, end: str) -> l
 
 
 def collect_pipe_frt(conn: sqlite3.Connection, start: str, end: str) -> list[dict]:
+    """Per-pipeline FRT — locally computed from first_agent_reply_date."""
     rows = conn.execute('''
-        SELECT p.label, t.time_to_first_agent_reply as frt_ms, t.id
+        SELECT p.label, t.id, t.createdate, t.first_agent_reply_date
         FROM tickets t JOIN pipelines p ON p.pipeline_id = t.hs_pipeline
         WHERE t.createdate >= ? AND t.createdate < ?
-          AND t.time_to_first_agent_reply IS NOT NULL AND p.is_legacy = 0
+          AND t.first_agent_reply_date IS NOT NULL AND p.is_legacy = 0
     ''', (start, end)).fetchall()
-    by_pipe: dict[str, dict] = defaultdict(lambda: {'vals': [], 'ticket_ids': []})
-    for label, frt_ms, tid in rows:
-        if frt_ms and frt_ms > 0:
-            by_pipe[label]['vals'].append(frt_ms)
+
+    tids = [r[1] for r in rows]
+    entry_map = _pipeline_entry_map(conn, tids) if tids else {}
+
+    by_pipe: dict[str, dict] = defaultdict(
+        lambda: {'wall': [], 'biz': [], 'ticket_ids': []}
+    )
+    for label, tid, createdate, reply_date in rows:
+        try:
+            c = datetime.fromisoformat(createdate.replace('Z', '+00:00'))
+            r = datetime.fromisoformat(reply_date.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            continue
+        wall_ms = int((r - c).total_seconds() * 1000)
+        if wall_ms > 0:
+            by_pipe[label]['wall'].append(wall_ms)
             by_pipe[label]['ticket_ids'].append(tid)
+        entry_at = entry_map.get(tid, createdate)
+        biz_ms = _biz_hours_ms(entry_at, reply_date)
+        if biz_ms is not None and biz_ms > 0:
+            by_pipe[label]['biz'].append(biz_ms)
+
     pipes = [{
         'pipeline': label,
-        'n': len(d['vals']),
-        'frt_median_ms': _safe_median(d['vals']),
-        'frt_mean_ms': _safe_mean(d['vals']),
+        'n': len(d['wall']),
+        'frt_median_ms': _safe_median(d['wall']),
+        'frt_mean_ms': _safe_mean(d['wall']),
+        'frt_biz_median_ms': _safe_median(d['biz']),
+        'frt_biz_mean_ms': _safe_mean(d['biz']),
         'tickets': _ticket_details(conn, d['ticket_ids']),
     } for label, d in by_pipe.items()]
     pipes.sort(key=lambda x: x['n'], reverse=True)
@@ -392,18 +589,24 @@ def collect_reopen(conn: sqlite3.Connection, start: str, end: str) -> dict:
 
 
 def collect_kpi(conn: sqlite3.Connection, start: str, end: str) -> dict:
-    ttc_vals = _ttc_for_range(conn, start, end)
-    frt_vals = _frt_for_range(conn, start, end)
+    ttc = _ttc_for_range(conn, start, end)
+    frt = _frt_for_range(conn, start, end)
     created = _created_count(conn, start, end)
     return {
-        'ttc_median_ms': _safe_median(ttc_vals),
-        'ttc_mean_ms': _safe_mean(ttc_vals),
-        'ttc_n': len(ttc_vals),
-        'frt_median_ms': _safe_median(frt_vals),
-        'frt_mean_ms': _safe_mean(frt_vals),
-        'frt_n': len(frt_vals),
+        # Wall-clock
+        'ttc_median_ms': _safe_median(ttc['wall']),
+        'ttc_mean_ms': _safe_mean(ttc['wall']),
+        'ttc_n': len(ttc['wall']),
+        'frt_median_ms': _safe_median(frt['wall']),
+        'frt_mean_ms': _safe_mean(frt['wall']),
+        'frt_n': len(frt['wall']),
+        # Business-hours (SLA-corrected)
+        'ttc_biz_median_ms': _safe_median(ttc['biz']),
+        'ttc_biz_mean_ms': _safe_mean(ttc['biz']),
+        'frt_biz_median_ms': _safe_median(frt['biz']),
+        'frt_biz_mean_ms': _safe_mean(frt['biz']),
         'created': created,
-        'closed': len(ttc_vals),
+        'closed': len(ttc['wall']),
     }
 
 
@@ -525,8 +728,13 @@ def collect_stage_time(conn: sqlite3.Connection, start: str, end: str) -> list[d
 
 
 def collect_sla_compliance(conn: sqlite3.Connection, start: str, end: str) -> dict:
-    from config import (SLA_FRT_TARGETS, SLA_BUSINESS_HOURS_START,
-                        SLA_BUSINESS_HOURS_END, SLA_BUSINESS_HOURS_PER_DAY)
+    """SLA compliance — locally computed using pipeline entry time + business hours.
+
+    Uses pipeline entry time (from stage_transitions) instead of createdate for
+    tickets that were moved from the free queue.  Business hours via module-level
+    _biz_hours().
+    """
+    from config import SLA_FRT_TARGETS
 
     rows = conn.execute("""
         SELECT t.id, t.hs_pipeline, p.label, t.createdate, t.first_agent_reply_date
@@ -536,28 +744,9 @@ def collect_sla_compliance(conn: sqlite3.Connection, start: str, end: str) -> di
           AND t.first_agent_reply_date IS NOT NULL
     """, (start, end)).fetchall()
 
-    def _biz_hours(created_str: str, replied_str: str) -> float | None:
-        try:
-            c = datetime.fromisoformat(created_str.replace('Z', '+00:00'))
-            r = datetime.fromisoformat(replied_str.replace('Z', '+00:00'))
-        except (ValueError, TypeError):
-            return None
-        if r <= c:
-            return 0.0
-        hours = 0.0
-        cur = c
-        while cur < r:
-            wd = cur.weekday()
-            if wd < 5:
-                day_start = cur.replace(hour=SLA_BUSINESS_HOURS_START, minute=0, second=0, microsecond=0)
-                day_end = cur.replace(hour=SLA_BUSINESS_HOURS_END, minute=0, second=0, microsecond=0)
-                work_start = max(cur, day_start)
-                work_end = min(r, day_end)
-                if work_start < work_end:
-                    hours += (work_end - work_start).total_seconds() / 3600
-            next_day = (cur + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-            cur = next_day
-        return round(hours, 2)
+    # Get pipeline entry times for all these tickets
+    tids = [r[0] for r in rows]
+    entry_map = _pipeline_entry_map(conn, tids) if tids else {}
 
     by_pipe: dict[str, dict] = defaultdict(lambda: {'label': '', 'met': 0, 'breached': 0, 'total': 0, 'biz_hours': [], 'breached_ids': []})
     totals = {'met': 0, 'breached': 0, 'total': 0}
@@ -567,7 +756,9 @@ def collect_sla_compliance(conn: sqlite3.Connection, start: str, end: str) -> di
         target = SLA_FRT_TARGETS.get(pid)
         if target is None:
             continue
-        bh = _biz_hours(created, replied)
+        # Use pipeline entry time (corrects for tickets moved from free queue)
+        entry_at = entry_map.get(tid, created)
+        bh = _biz_hours(entry_at, replied)
         if bh is None:
             continue
 

@@ -162,6 +162,11 @@ tr[onclick]:hover td, tr[style*="cursor:pointer"]:hover td { background: var(--b
     <button class="control-btn active" data-metric="median" onclick="setMetric('median')">Median</button>
     <button class="control-btn" data-metric="mean" onclick="setMetric('mean')">Average</button>
   </div>
+  <div class="control-group">
+    <label>Time</label>
+    <button class="control-btn active" data-timemode="wall" onclick="setTimeMode('wall')" title="Wall clock — actual elapsed time including nights, weekends, and off-hours">Wall clock</button>
+    <button class="control-btn" data-timemode="sla" onclick="setTimeMode('sla')" title="SLA — business hours only (Mon-Fri 10:00-22:00 UTC), corrected for pipeline moves">SLA</button>
+  </div>
   <button class="export-btn" onclick="exportHtml()">Export HTML</button>
   <button class="export-btn" onclick="exportPdf()">Export PDF</button>
 </div>
@@ -440,6 +445,7 @@ const DATA = {};
 // ============================================================
 let currentPeriod = 'week';
 let currentMetric = 'median';
+let currentTimeMode = 'wall';  // 'wall' = wall-clock, 'sla' = business-hours/SLA-corrected
 let volView = 'chart';
 let pipeFrtView = 'table';
 let typeFamily = 'gk';
@@ -461,10 +467,28 @@ const TICK_COLOR = '#6b7080';
 const fmtNum = n => n != null ? Number(n).toLocaleString() : '--';
 const msToHrs = ms => ms != null ? (ms / 3600000).toFixed(1) : '--';
 const msToDays = ms => ms != null ? (ms / 86400000).toFixed(1) : '--';
-function ttcKey() { return currentMetric === 'median' ? 'ttc_median_ms' : 'ttc_mean_ms'; }
-function frtKey() { return currentMetric === 'median' ? 'frt_median_ms' : 'frt_mean_ms'; }
+function ttcKey() {
+  const prefix = currentTimeMode === 'sla' ? 'ttc_biz_' : 'ttc_';
+  return currentMetric === 'median' ? prefix + 'median_ms' : prefix + 'mean_ms';
+}
+function frtKey() {
+  const prefix = currentTimeMode === 'sla' ? 'frt_biz_' : 'frt_';
+  return currentMetric === 'median' ? prefix + 'median_ms' : prefix + 'mean_ms';
+}
 function stageTimeKey() { return currentMetric === 'median' ? 'median_ms' : 'mean_ms'; }
 function metricLabel() { return currentMetric === 'median' ? 'Median' : 'Average'; }
+function timeModeLabel() { return currentTimeMode === 'sla' ? 'SLA' : 'Wall clock'; }
+function timeModeUnit(type) {
+  // SLA mode shows business hours; wall clock shows hrs for FRT, days for TTC
+  if (currentTimeMode === 'sla') return 'biz hrs';
+  return type === 'frt' ? 'hrs' : 'days';
+}
+function fmtTimeVal(ms, type) {
+  // Format a time value based on current time mode
+  if (ms == null) return '--';
+  if (currentTimeMode === 'sla') return (ms / 3600000).toFixed(1);  // always biz hours
+  return type === 'frt' ? msToHrs(ms) : msToDays(ms);
+}
 function trendDataKey() {
   if (currentPeriod === 'week') return 'weekly';
   if (currentPeriod === 'month') return 'monthly';
@@ -909,6 +933,12 @@ function setMetric(m) {
   closeAllDrilldowns();
   renderAll();
 }
+function setTimeMode(m) {
+  currentTimeMode = m;
+  document.querySelectorAll('[data-timemode]').forEach(b => b.classList.toggle('active', b.dataset.timemode === m));
+  closeAllDrilldowns();
+  renderAll();
+}
 function setVolView(view, btn) {
   volView = view;
   btn.parentElement.querySelectorAll('.control-btn').forEach(b => b.classList.remove('active'));
@@ -985,14 +1015,14 @@ function renderKPI() {
 
   document.getElementById('kpi-grid').innerHTML = `
     <div class="metric-card">
-      <div class="metric-label">${metricLabel()} time to close</div>
-      <div class="metric-value">${msToDays(d[ttcKey()])} <span style="font-size:13px;font-weight:400;color:var(--text-secondary)">days</span></div>
+      <div class="metric-label">${metricLabel()} time to close <span style="font-size:11px;color:var(--text-secondary)">(${timeModeLabel()})</span></div>
+      <div class="metric-value">${fmtTimeVal(d[ttcKey()], 'ttc')} <span style="font-size:13px;font-weight:400;color:var(--text-secondary)">${timeModeUnit('ttc')}</span></div>
       <div class="metric-sub">n = ${fmtNum(d.closed || 0)} tickets</div>
       ${deltaHtml(d[ttcKey()], p ? p[ttcKey()] : null, true)}
     </div>
     <div class="metric-card">
-      <div class="metric-label">${metricLabel()} first response</div>
-      <div class="metric-value">${msToHrs(d[frtKey()])} <span style="font-size:13px;font-weight:400;color:var(--text-secondary)">hrs</span></div>
+      <div class="metric-label">${metricLabel()} first response <span style="font-size:11px;color:var(--text-secondary)">(${timeModeLabel()})</span></div>
+      <div class="metric-value">${fmtTimeVal(d[frtKey()], 'frt')} <span style="font-size:13px;font-weight:400;color:var(--text-secondary)">${timeModeUnit('frt')}</span></div>
       <div class="metric-sub">n = ${fmtNum(d.created || 0)} tickets</div>
       ${deltaHtml(d[frtKey()], p ? p[frtKey()] : null, true)}
     </div>
@@ -1052,10 +1082,14 @@ function renderVolTable() {
 function renderTtcChart() {
   const d = DATA[trendDataKey()];
   if (!d || !d.length) return;
-  const tk = ttcKey(), fk = frtKey(), ml = metricLabel();
-  document.getElementById('ttc-frt-label').textContent = ml + ' TTC & FRT trend';
-  document.getElementById('ttc-legend-label').textContent = ml + ' TTC (days)';
-  document.getElementById('frt-legend-label').textContent = ml + ' FRT (hours)';
+  const tk = ttcKey(), fk = frtKey(), ml = metricLabel(), tm = timeModeLabel();
+  const ttcUnit = timeModeUnit('ttc'), frtUnit = timeModeUnit('frt');
+  const ttcDiv = currentTimeMode === 'sla' ? 3600000 : 86400000;
+  const frtDiv = 3600000;  // always hours
+  const ttcSuffix = currentTimeMode === 'sla' ? 'h' : 'd';
+  document.getElementById('ttc-frt-label').textContent = ml + ' TTC & FRT trend (' + tm + ')';
+  document.getElementById('ttc-legend-label').textContent = ml + ' TTC (' + ttcUnit + ')';
+  document.getElementById('frt-legend-label').textContent = ml + ' FRT (' + frtUnit + ')';
 
   if (ttcChart) ttcChart.destroy();
   ttcChart = new Chart(document.getElementById('ttcChart'), {
@@ -1063,16 +1097,16 @@ function renderTtcChart() {
     data: {
       labels: d.map(x => x.label),
       datasets: [
-        { label:'TTC', data:d.map(x => x[tk] ? +(x[tk]/86400000).toFixed(2) : null), borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.1)', fill:true, tension:0.3, pointRadius:3, yAxisID:'y', spanGaps:true },
-        { label:'FRT', data:d.map(x => x[fk] ? +(x[fk]/3600000).toFixed(2) : null), borderColor:'#f0997b', backgroundColor:'rgba(240,153,123,0.1)', fill:true, tension:0.3, pointRadius:3, yAxisID:'y1', spanGaps:true }
+        { label:'TTC', data:d.map(x => x[tk] ? +(x[tk]/ttcDiv).toFixed(2) : null), borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.1)', fill:true, tension:0.3, pointRadius:3, yAxisID:'y', spanGaps:true },
+        { label:'FRT', data:d.map(x => x[fk] ? +(x[fk]/frtDiv).toFixed(2) : null), borderColor:'#f0997b', backgroundColor:'rgba(240,153,123,0.1)', fill:true, tension:0.3, pointRadius:3, yAxisID:'y1', spanGaps:true }
       ]
     },
     options: chartOpts({
       plugins:{legend:{display:false},tooltip:makeExternalTooltip(ttTtcFrt)},
       scales: {
         x: xAxis(),
-        y: { position:'left', grid:{color:GRID_COLOR}, ticks:{color:'#a78bfa', font:{size:11}, callback:v=>v+'d'}, title:{display:true, text:'TTC (days)', color:'#a78bfa', font:{size:11}} },
-        y1: { position:'right', grid:{display:false}, ticks:{color:'#f0997b', font:{size:11}, callback:v=>v+'h'}, title:{display:true, text:'FRT (hours)', color:'#f0997b', font:{size:11}} }
+        y: { position:'left', grid:{color:GRID_COLOR}, ticks:{color:'#a78bfa', font:{size:11}, callback:v=>v+ttcSuffix}, title:{display:true, text:'TTC (' + ttcUnit + ')', color:'#a78bfa', font:{size:11}} },
+        y1: { position:'right', grid:{display:false}, ticks:{color:'#f0997b', font:{size:11}, callback:v=>v+'h'}, title:{display:true, text:'FRT (' + frtUnit + ')', color:'#f0997b', font:{size:11}} }
       }
     })
   });
@@ -1085,13 +1119,14 @@ function renderRepTable() {
   const d = DATA.rep ? DATA.rep[currentPeriod] : null;
   if (!d) { document.getElementById('rep-body').innerHTML = ''; return; }
   const tk = ttcKey(), fk = frtKey(), ml = metricLabel();
-  document.getElementById('rep-ttc-header').textContent = ml + ' TTC';
-  document.getElementById('rep-frt-header').textContent = ml + ' FRT';
+  const ttcU = timeModeUnit('ttc'), frtU = timeModeUnit('frt');
+  document.getElementById('rep-ttc-header').textContent = ml + ' TTC (' + ttcU + ')';
+  document.getElementById('rep-frt-header').textContent = ml + ' FRT (' + frtU + ')';
   document.getElementById('rep-body').innerHTML = d.map((r, i) => `
     <tr onclick="drilldownRep(${i})" style="cursor:pointer">
       <td style="font-weight:500">${r.name}</td>
-      <td>${msToDays(r[tk])} days</td>
-      <td>${msToHrs(r[fk])} hrs</td>
+      <td>${fmtTimeVal(r[tk], 'ttc')} ${ttcU}</td>
+      <td>${fmtTimeVal(r[fk], 'frt')} ${frtU}</td>
       <td>${fmtNum(r.closed)}</td>
     </tr>
   `).join('');
@@ -1142,8 +1177,8 @@ function renderRepDetail() {
 
   // Summary cards
   html += '<div class="summary-cards" style="grid-template-columns:repeat(3,1fr)">';
-  html += '<div class="metric-card"><div class="metric-label">' + metricLabel() + ' TTC</div><div class="metric-value" style="font-size:18px">' + msToDays(r[ttcKey()]) + 'd</div></div>';
-  html += '<div class="metric-card"><div class="metric-label">' + metricLabel() + ' FRT</div><div class="metric-value" style="font-size:18px">' + msToHrs(r[frtKey()]) + 'h</div></div>';
+  html += '<div class="metric-card"><div class="metric-label">' + metricLabel() + ' TTC (' + timeModeLabel() + ')</div><div class="metric-value" style="font-size:18px">' + fmtTimeVal(r[ttcKey()], 'ttc') + ' ' + timeModeUnit('ttc') + '</div></div>';
+  html += '<div class="metric-card"><div class="metric-label">' + metricLabel() + ' FRT (' + timeModeLabel() + ')</div><div class="metric-value" style="font-size:18px">' + fmtTimeVal(r[frtKey()], 'frt') + ' ' + timeModeUnit('frt') + '</div></div>';
   html += '<div class="metric-card"><div class="metric-label">Closed</div><div class="metric-value" style="font-size:18px">' + fmtNum(r.closed) + '</div></div>';
   html += '</div>';
 
@@ -1182,9 +1217,9 @@ function renderRepDetail() {
 function renderPipeFrt() {
   const d = DATA.pipeFrt ? DATA.pipeFrt[currentPeriod] : null;
   if (!d) { document.getElementById('pipe-body').innerHTML = ''; return; }
-  const fk = frtKey(), ml = metricLabel();
-  document.getElementById('pipe-frt-label').textContent = ml + ' first response time by pipeline';
-  document.getElementById('pipe-frt-header').textContent = ml + ' FRT';
+  const fk = frtKey(), ml = metricLabel(), frtU = timeModeUnit('frt');
+  document.getElementById('pipe-frt-label').textContent = ml + ' first response time by pipeline (' + timeModeLabel() + ')';
+  document.getElementById('pipe-frt-header').textContent = ml + ' FRT (' + frtU + ')';
 
   const maxFrt = Math.max(...d.map(p => p[fk] || 0));
   document.getElementById('pipe-body').innerHTML = d.map((p, i) => {
@@ -1194,7 +1229,7 @@ function renderPipeFrt() {
     return `<tr onclick="drilldownPipeFrt(${i})" style="cursor:pointer">
       <td style="font-weight:500">${p.pipeline}</td>
       <td>${fmtNum(p.n)}</td>
-      <td>${msToHrs(v)} hrs</td>
+      <td>${fmtTimeVal(v, 'frt')} ${frtU}</td>
       <td><div class="bar-bg"><div class="bar-fill" style="width:${w}%;background:${color}"></div></div></td>
     </tr>`;
   }).join('');
@@ -1204,8 +1239,8 @@ function renderPipeFrt() {
   const barColors = d.map(r => { const v = r[fk]||0; const pct = maxFrt?v/maxFrt:0; return pct<0.3?'#34d399':pct<0.6?'#fbbf24':'#f87171'; });
   pipeFrtBarChartObj = new Chart(document.getElementById('pipeFrtBarChart'), {
     type:'bar',
-    data:{ labels:d.map(r=>r.pipeline), datasets:[{label:ml+' FRT (hrs)', data:d.map(r=>r[fk]?(r[fk]/3600000):0), backgroundColor:barColors}] },
-    options: chartOpts({ indexAxis:'y', scales:{ x:{ticks:{color:TICK_COLOR},grid:{color:GRID_COLOR},title:{display:true,text:'Hours',color:TICK_COLOR}}, y:{ticks:{color:'#9ca0ab'},grid:{color:GRID_COLOR}} } })
+    data:{ labels:d.map(r=>r.pipeline), datasets:[{label:ml+' FRT (' + frtU + ')', data:d.map(r=>r[fk]?(r[fk]/3600000):0), backgroundColor:barColors}] },
+    options: chartOpts({ indexAxis:'y', scales:{ x:{ticks:{color:TICK_COLOR},grid:{color:GRID_COLOR},title:{display:true,text:frtU,color:TICK_COLOR}}, y:{ticks:{color:'#9ca0ab'},grid:{color:GRID_COLOR}} } })
   });
 }
 let _pipeFrtDrill = { idx: null, ownerFilter: null, typeFilter: null, productFilter: null };
@@ -1254,7 +1289,7 @@ function renderPipeFrtDetail() {
 
   // Summary cards
   html += '<div class="summary-cards" style="grid-template-columns:repeat(2,1fr)">';
-  html += '<div class="metric-card"><div class="metric-label">' + metricLabel() + ' FRT</div><div class="metric-value" style="font-size:18px">' + msToHrs(p[frtKey()]) + 'h</div></div>';
+  html += '<div class="metric-card"><div class="metric-label">' + metricLabel() + ' FRT (' + timeModeLabel() + ')</div><div class="metric-value" style="font-size:18px">' + fmtTimeVal(p[frtKey()], 'frt') + ' ' + timeModeUnit('frt') + '</div></div>';
   html += '<div class="metric-card"><div class="metric-label">Tickets</div><div class="metric-value" style="font-size:18px">' + fmtNum(p.n) + '</div></div>';
   html += '</div>';
 
@@ -2133,8 +2168,8 @@ function getExpandInfo(key) {
     const d = DATA.kpi ? DATA.kpi[currentPeriod] : null;
     if (!d) return null;
     let t = '<table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>';
-    t += '<tr><td>'+ml+' TTC</td><td>'+msToDays(d[ttcKey()])+' days</td></tr>';
-    t += '<tr><td>'+ml+' FRT</td><td>'+msToHrs(d[frtKey()])+' hrs</td></tr>';
+    t += '<tr><td>'+ml+' TTC ('+timeModeLabel()+')</td><td>'+fmtTimeVal(d[ttcKey()], 'ttc')+' '+timeModeUnit('ttc')+'</td></tr>';
+    t += '<tr><td>'+ml+' FRT ('+timeModeLabel()+')</td><td>'+fmtTimeVal(d[frtKey()], 'frt')+' '+timeModeUnit('frt')+'</td></tr>';
     t += '<tr><td>Created</td><td>'+fmtNum(d.created)+'</td></tr>';
     t += '<tr><td>Closed</td><td>'+fmtNum(d.closed)+'</td></tr>';
     t += '</tbody></table>';
@@ -2153,30 +2188,35 @@ function getExpandInfo(key) {
     const d = DATA[trendDataKey()];
     if (!d) return null;
     const tk = ttcKey(), fk = frtKey();
-    let t = '<table><thead><tr><th>Period</th><th>'+ml+' TTC (days)</th><th>'+ml+' FRT (hrs)</th></tr></thead><tbody>';
-    d.forEach(r => { t += '<tr><td>'+r.label+'</td><td>'+msToDays(r[tk])+'</td><td>'+msToHrs(r[fk])+'</td></tr>'; });
+    const ttcU = timeModeUnit('ttc'), frtU = timeModeUnit('frt');
+    const ttcDiv = currentTimeMode === 'sla' ? 3600000 : 86400000;
+    const ttcSuffix = currentTimeMode === 'sla' ? 'h' : 'd';
+    let t = '<table><thead><tr><th>Period</th><th>'+ml+' TTC ('+ttcU+')</th><th>'+ml+' FRT ('+frtU+')</th></tr></thead><tbody>';
+    d.forEach(r => { t += '<tr><td>'+r.label+'</td><td>'+fmtTimeVal(r[tk],'ttc')+'</td><td>'+fmtTimeVal(r[fk],'frt')+'</td></tr>'; });
     t += '</tbody></table>';
     const cfg = { type:'line', data:{ labels:d.map(r=>r.label), datasets:[
-      {label:'TTC (days)',data:d.map(r=>r[tk]?+(r[tk]/86400000).toFixed(2):null),borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,0.1)',fill:true,tension:0.3,pointRadius:3,yAxisID:'y',spanGaps:true},
-      {label:'FRT (hrs)',data:d.map(r=>r[fk]?+(r[fk]/3600000).toFixed(2):null),borderColor:'#f0997b',backgroundColor:'rgba(240,153,123,0.1)',fill:true,tension:0.3,pointRadius:3,yAxisID:'y1',spanGaps:true}
-    ]}, options:chartOpts({scales:{x:xAxis(), y:{position:'left',grid:{color:GRID_COLOR},ticks:{color:'#a78bfa',font:{size:11},callback:v=>v+'d'},title:{display:true,text:'TTC (days)',color:'#a78bfa',font:{size:11}}}, y1:{position:'right',grid:{display:false},ticks:{color:'#f0997b',font:{size:11},callback:v=>v+'h'},title:{display:true,text:'FRT (hours)',color:'#f0997b',font:{size:11}}}}}) };
-    return {title:ml+' TTC & FRT Trend', config:cfg, table:t};
+      {label:'TTC ('+ttcU+')',data:d.map(r=>r[tk]?+(r[tk]/ttcDiv).toFixed(2):null),borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,0.1)',fill:true,tension:0.3,pointRadius:3,yAxisID:'y',spanGaps:true},
+      {label:'FRT ('+frtU+')',data:d.map(r=>r[fk]?+(r[fk]/3600000).toFixed(2):null),borderColor:'#f0997b',backgroundColor:'rgba(240,153,123,0.1)',fill:true,tension:0.3,pointRadius:3,yAxisID:'y1',spanGaps:true}
+    ]}, options:chartOpts({scales:{x:xAxis(), y:{position:'left',grid:{color:GRID_COLOR},ticks:{color:'#a78bfa',font:{size:11},callback:v=>v+ttcSuffix},title:{display:true,text:'TTC ('+ttcU+')',color:'#a78bfa',font:{size:11}}}, y1:{position:'right',grid:{display:false},ticks:{color:'#f0997b',font:{size:11},callback:v=>v+'h'},title:{display:true,text:'FRT ('+frtU+')',color:'#f0997b',font:{size:11}}}}}) };
+    return {title:ml+' TTC & FRT Trend (' + timeModeLabel() + ')', config:cfg, table:t};
   }
   if (key === 'rep') {
     const d = DATA.rep ? DATA.rep[currentPeriod] : null;
     if (!d) return null;
-    let t = '<table><thead><tr><th>Name</th><th>'+ml+' TTC (days)</th><th>'+ml+' FRT (hrs)</th><th>Closed</th></tr></thead><tbody>';
-    d.forEach(r => { t += '<tr><td>'+r.name+'</td><td>'+msToDays(r[ttcKey()])+'</td><td>'+msToHrs(r[frtKey()])+'</td><td>'+fmtNum(r.closed)+'</td></tr>'; });
+    const ttcU = timeModeUnit('ttc'), frtU = timeModeUnit('frt');
+    let t = '<table><thead><tr><th>Name</th><th>'+ml+' TTC ('+ttcU+')</th><th>'+ml+' FRT ('+frtU+')</th><th>Closed</th></tr></thead><tbody>';
+    d.forEach(r => { t += '<tr><td>'+r.name+'</td><td>'+fmtTimeVal(r[ttcKey()],'ttc')+'</td><td>'+fmtTimeVal(r[frtKey()],'frt')+'</td><td>'+fmtNum(r.closed)+'</td></tr>'; });
     return {title:'Rep Performance', table:t+'</tbody></table>'};
   }
   if (key === 'pipefrt') {
     const d = DATA.pipeFrt ? DATA.pipeFrt[currentPeriod] : null;
     if (!d) return null;
-    let t = '<table><thead><tr><th>Pipeline</th><th>'+ml+' FRT (hrs)</th><th>Tickets</th></tr></thead><tbody>';
-    d.forEach(r => { t += '<tr><td>'+r.pipeline+'</td><td>'+msToHrs(r[frtKey()])+'</td><td>'+fmtNum(r.n)+'</td></tr>'; });
+    const frtU = timeModeUnit('frt');
+    let t = '<table><thead><tr><th>Pipeline</th><th>'+ml+' FRT ('+frtU+')</th><th>Tickets</th></tr></thead><tbody>';
+    d.forEach(r => { t += '<tr><td>'+r.pipeline+'</td><td>'+fmtTimeVal(r[frtKey()],'frt')+'</td><td>'+fmtNum(r.n)+'</td></tr>'; });
     const colors = d.map(r => { const v=r[frtKey()]||0; const mx=Math.max(...d.map(x=>x[frtKey()]||0)); const p=mx?v/mx:0; return p<0.3?'#34d399':p<0.6?'#fbbf24':'#f87171'; });
     const cfg = {type:'bar',data:{labels:d.map(r=>r.pipeline),datasets:[{data:d.map(r=>r[frtKey()]?(r[frtKey()]/3600000):0),backgroundColor:colors}]},options:chartOpts({indexAxis:'y',scales:{x:{ticks:{color:TICK_COLOR},grid:{color:GRID_COLOR}},y:{ticks:{color:'#9ca0ab'},grid:{color:GRID_COLOR}}}})};
-    return {title:ml+' First Response Time by Pipeline', config:cfg, table:t+'</tbody></table>'};
+    return {title:ml+' First Response Time by Pipeline (' + timeModeLabel() + ')', config:cfg, table:t+'</tbody></table>'};
   }
   if (key === 'stage') {
     const d = DATA.stageTime ? DATA.stageTime[currentPeriod] : null;
